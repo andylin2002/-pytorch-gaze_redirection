@@ -13,6 +13,11 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.utils as vutils
 
+import numpy as np
+from torchvision.utils import save_image
+
+from utils.ops import l1_loss, content_loss, style_loss, angular_error
+
 class Model(object):
     def __init__(self, params):
         self.params = params  # 存儲傳遞的參數
@@ -93,6 +98,7 @@ class Model(object):
         train_dataset_num = len(image_data_class.train_images)
         test_dataset_num = len(image_data_class.test_images)
 
+        # 為了把資料放入DataLoader
         train_dataset = TensorDataset(
             torch.tensor(image_data_class.train_images),
             torch.tensor(image_data_class.train_angles_r),
@@ -186,8 +192,8 @@ class Model(object):
                 endpoints_mixed[f"features.{name}"] = x
 
         # 計算內容損失和風格損失
-        c_loss = self.content_loss(endpoints_mixed, content_layers)
-        s_loss = self.style_loss(endpoints_mixed, style_layers)
+        c_loss = content_loss(endpoints_mixed, content_layers)
+        s_loss = style_loss(endpoints_mixed, style_layers)
 
         return c_loss, s_loss
     
@@ -253,11 +259,129 @@ class Model(object):
     
     def train(self):
 
+        hps = self.params
+
+        num_epoch = hps.epochs
+        train_size = self.train_size
+        batch_size = hps.batch_size
+        learning_rate = hps.lr
+
+        num_iter = train_size // batch_size
+
+        # 日誌與模型路徑
+        summary_dir = os.path.join(hps.log_dir, 'summary')
+        summary_writer = SummaryWriter(log_dir=summary_dir)
+
+        model_path = os.path.join(hps.log_dir, 'model.ckpt')
+
+        # 設定 GPU 動態記憶體增長
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            torch.backends.cudnn.benchmark = True
+            # PyTorch 不需要顯式設定動態記憶體增長，它會自動優化 GPU 記憶體使用
+        else:
+            device = torch.device("cpu")
+        #print(f"Using device: {device}")
+
+        optimizer_d, optimizer_g, loss_d, loss_g = self.add_optimizer()
+
+        try:
+            for epoch in range(num_epoch):
+                print(f"Epoch: {epoch+1}/{num_epoch}")
+
+                # 動態調整學習率
+                if epoch >= num_epoch // 2:
+                    learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
+                    for param_group in optimizer_d.param_groups:
+                        param_group['lr'] = learning_rate
+                    for param_group in optimizer_g.param_groups:
+                        param_group['lr'] = learning_rate
+
+                for it in range(num_iter):
+                    # 訓練 Discriminator
+                    optimizer_d.zero_grad()
+                    loss_d.backward()
+                    optimizer_d.step()
+
+                    # 訓練 Generator (每 5 步執行一次)
+                    if it % 5 == 0:
+                        optimizer_g.zero_grad()
+                        loss_g.backward()
+                        optimizer_g.step()
+
+                    # 記錄摘要和保存模型
+                    if it % hps.summary_steps == 0:
+                        self.global_step = epoch * num_iter + it
+
+                        # 使用自定義的 add_summary 函式
+                        self.add_summary(summary_writer, self.global_step)
+
+                        # 保存模型權重
+                        torch.save(self.model.state_dict(), f"{model_path}_{self.global_step}.pth")
+
+        except KeyboardInterrupt:
+            print("Training interrupted. Saving model...")
+            torch.save(self.model.state_dict(), f"{model_path}_final.pth")
+
+        finally:
+            summary_writer.close()
+
 
 
     def eval(self):
 
+        hps = self.params
 
+        checkpoint_path = os.path.join(hps.log_dir, 'model.ckpt')
+        self.generator.load_state_dict(torch.load(checkpoint_path))
 
-    
+        # 設定 GPU 動態記憶體增長
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            torch.backends.cudnn.benchmark = True
+            # PyTorch 不需要顯式設定動態記憶體增長，它會自動優化 GPU 記憶體使用
+        else:
+            device = torch.device("cpu")
+        #print(f"Using device: {device}")
+
+        imgs_dir = os.path.join(hps.log_dir, 'eval')
+        os.makedirs(imgs_dir, exist_ok=True)
+
+        tar_dir = os.path.join(imgs_dir, 'targets')
+        gene_dir = os.path.join(imgs_dir, 'genes')
+        real_dir = os.path.join(imgs_dir, 'reals')
+
+        os.makedirs(tar_dir, exist_ok=True)
+        os.makedirs(gene_dir, exist_ok=True)
+        os.makedirs(real_dir, exist_ok=True)
+
+        with torch.no_grad():
+            for i, (real_imgs, target_imgs, angles_r, angles_g) in enumerate(self.test_loader):
+                real_imgs, target_imgs, angles_r, angles_g = (
+                    real_imgs.to(hps.device),
+                    target_imgs.to(hps.device),
+                    angles_r.to(hps.device),
+                    angles_g.to(hps.device),
+                )
+
+                # Generate fake images
+                fake_imgs = self.generator(real_imgs, angles_g)
+
+                # Calculate angular errors
+                a_t = angles_g.cpu().numpy() * np.array([15, 10])
+                a_r = angles_r.cpu().numpy() * np.array([15, 10])
+                delta = angular_error(a_t, a_r)
+
+                # Save images
+                for j in range(real_imgs.size(0)):
+                    save_image(target_imgs[j], os.path.join(
+                        tar_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
+
+                    save_image(fake_imgs[j], os.path.join(
+                        gene_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
+
+                    save_image(real_imgs[j], os.path.join(
+                        real_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
+
+        print("Evaluation finished.")
         

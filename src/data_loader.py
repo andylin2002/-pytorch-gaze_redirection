@@ -25,7 +25,7 @@ class ImageData(object):
             key = '_'.join([identity, head_pose, side])
             if key not in self.file_dict:
                 self.file_dict[key] = []
-                self.file_dict[key].append(f_name)
+                self.file_dict[key].append(f_name) # f_name是照片的完整名稱
 
         self.train_images = []
         self.train_angles_r = []
@@ -80,7 +80,7 @@ class ImageData(object):
             if key.split('_')[-1] == 'R':  # 判斷是否為右眼
                 flip = -1
             
-            for f_r in file_list:
+            for f_r in file_list: # 對於每個key（ex: 0010_0P_R）的照片
                 file_path = os.path.join(self.data_path, f_r)
                 h_angle_r = flip * float(f_r.split('_')[-2].split('H')[0]) / 15.0  # 水平方向角度
                 v_angle_r = float(f_r.split('_')[-3].split('V')[0]) / 10.0  # 垂直方向角度
