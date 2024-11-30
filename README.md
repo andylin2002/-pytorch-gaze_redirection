@@ -1,3 +1,9 @@
+## Dependencies
+
+tensorflow == 2.18.0
+Python == 3.10.15
+
+
 ## Train
 
 ```Bash
