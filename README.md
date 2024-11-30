@@ -1,6 +1,6 @@
 ## Dependencies
 
-tensorflow == 2.18.0
+tensorflow == 2.18.0 <br />
 Python == 3.10.15
 
 
