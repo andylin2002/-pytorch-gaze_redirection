@@ -25,7 +25,7 @@ class ImageData(object):
             key = '_'.join([identity, head_pose, side])
             if key not in self.file_dict:
                 self.file_dict[key] = []
-                self.file_dict[key].append(f_name) # f_name是照片的完整名稱
+            self.file_dict[key].append(f_name) # f_name是照片的完整名稱
 
         self.train_images = []
         self.train_angles_r = []
@@ -89,7 +89,7 @@ class ImageData(object):
                     file_path_t = os.path.join(self.data_path, f_g)
                     h_angle_g = flip * float(f_g.split('_')[-2].split('H')[0]) / 15.0
                     v_angle_g = float(f_g.split('_')[-3].split('V')[0]) / 10.0
-
+                    
                     if idx <= self.ids:  # 訓練集
                         self.train_images.append(file_path)
                         self.train_angles_r.append([h_angle_r, v_angle_r])

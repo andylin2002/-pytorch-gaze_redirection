@@ -33,25 +33,13 @@ class Model(object):
         test_batch = next(iter(self.test_iter))
 
         # 解包訓練數據
-        self.x_r = train_batch['x_r']
-        self.angles_r = train_batch['angles_r']
-        self.labels = train_batch['labels']
-        self.x_t = train_batch['x_t']
-        self.angles_g = train_batch['angles_g']
+        self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
 
         # 解包驗證數據
-        self.x_valid_r = valid_batch['x_r']
-        self.angles_valid_r = valid_batch['angles_r']
-        self.labels_valid = valid_batch['labels']
-        self.x_valid_t = valid_batch['x_t']
-        self.angles_valid_g = valid_batch['angles_g']
+        self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
 
         # 解包測試數據
-        self.x_test_r = test_batch['x_r']
-        self.angles_test_r = test_batch['angles_r']
-        self.labels_test = test_batch['labels']
-        self.x_test_t = test_batch['x_t']
-        self.angles_test_g = test_batch['angles_g']
+        self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
 
         self.x_g = generator(self.x_r, self.angles_g)
         self.x_recon = generator(self.x_g, self.angles_r, reuse=True)
@@ -97,24 +85,64 @@ class Model(object):
 
         train_dataset_num = len(image_data_class.train_images)
         test_dataset_num = len(image_data_class.test_images)
+        print(train_dataset_num)
+        print(test_dataset_num)
 
-        # 為了把資料放入DataLoader
+        '''train_data'''
+
+        train_images = []
+        train_angles_r = []
+        train_labels = []
+        train_images_t = []
+        train_angles_g = []
+
+        for each in range(train_dataset_num):
+            image_data_class.train_images[each], image_data_class.train_angles_r[each], image_data_class.train_labels[each], image_data_class.train_images_t[each], image_data_class.train_angles_g[each] = image_data_class.image_processing(
+                image_data_class.train_images[each],
+                image_data_class.train_angles_r[each],
+                image_data_class.train_labels[each],
+                image_data_class.train_images_t[each],
+                image_data_class.train_angles_g[each]
+            )
+
+        train_images = torch.stack(image_data_class.train_images) if isinstance(image_data_class.train_images[0], torch.Tensor) else torch.tensor(image_data_class.train_images, dtype=torch.float32)
+        train_angles_r = torch.tensor(image_data_class.train_angles_r, dtype=torch.float32)
+        train_labels = torch.tensor(image_data_class.train_labels, dtype=torch.float32)
+        train_images_t = torch.stack(image_data_class.train_images_t) if isinstance(image_data_class.train_images_t[0], torch.Tensor) else torch.tensor(image_data_class.train_images_t, dtype=torch.float32)
+        train_angles_g = torch.tensor(image_data_class.train_angles_g, dtype=torch.float32)
+
         train_dataset = TensorDataset(
-            torch.tensor(image_data_class.train_images),
-            torch.tensor(image_data_class.train_angles_r),
-            torch.tensor(image_data_class.train_labels),
-            torch.tensor(image_data_class.train_images_t),
-            torch.tensor(image_data_class.train_angles_g)
+            train_images,
+            train_angles_r,
+            train_labels,
+            train_images_t,
+            train_angles_g
         )
+
+        '''test_data'''
+        for each in range(test_dataset_num):
+            image_data_class.test_images[each], image_data_class.test_angles_r[each], image_data_class.test_labels[each], image_data_class.test_images_t[each], image_data_class.test_angles_g[each] = image_data_class.image_processing(
+                image_data_class.test_images[each],
+                image_data_class.test_angles_r[each],
+                image_data_class.test_labels[each],
+                image_data_class.test_images_t[each],
+                image_data_class.test_angles_g[each]
+            )
+
+        test_images = torch.stack(image_data_class.test_images) if isinstance(image_data_class.test_images[0], torch.Tensor) else torch.tensor(image_data_class.test_images, dtype=torch.float32)
+        test_angles_r = torch.tensor(image_data_class.test_angles_r, dtype=torch.float32)
+        test_labels = torch.tensor(image_data_class.test_labels, dtype=torch.float32)
+        test_images_t = torch.stack(image_data_class.test_images_t) if isinstance(image_data_class.test_images_t[0], torch.Tensor) else torch.tensor(image_data_class.test_images_t, dtype=torch.float32)
+        test_angles_g = torch.tensor(image_data_class.test_angles_g, dtype=torch.float32)
 
         test_dataset = TensorDataset(
-            torch.tensor(image_data_class.test_images),
-            torch.tensor(image_data_class.test_angles_r),
-            torch.tensor(image_data_class.test_labels),
-            torch.tensor(image_data_class.test_images_t),
-            torch.tensor(image_data_class.test_angles_g)
+            test_images,
+            test_angles_r,
+            test_labels,
+            test_images_t,
+            test_angles_g
         )
-
+        
         train_loader = DataLoader(train_dataset, batch_size=hps.batch_size, shuffle=True, num_workers=8)
         valid_loader = DataLoader(test_dataset, batch_size=hps.batch_size, shuffle=False, num_workers=8)
         test_loader = DataLoader(test_dataset, batch_size=hps.batch_size, shuffle=False, num_workers=8)
