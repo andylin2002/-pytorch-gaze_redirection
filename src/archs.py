@@ -41,12 +41,12 @@ def discriminator(params, x_init):
 def generator(input_, angles):
 
     channel = 64
-    style_dim = angles.shape[-1]
+    style_dim = angles.shape[-1] # style_dim = 2
 
     # 重塑並複製角度特徵
-    angles_reshaped = angles.view(-1, 1, 1, style_dim)
-    angles_tiled = angles_reshaped.expand(-1, input_.shape[2], input_.shape[3], -1)
-    x = torch.cat([input_, angles_tiled], dim=1)
+    angles_reshaped = angles.view(-1, style_dim, 1, 1) # angles_reshaped.shape = [32, 2, 1, 1]
+    angles_tiled = angles_reshaped.expand(-1, style_dim, input_.shape[2], input_.shape[3]) # angles_tiled.shape = [32, 2, 64, 64]
+    x = torch.cat([input_, angles_tiled], dim=1) # x.shape = [32, 5, 64, 64]
 
     # 定義生成器的卷積結構
     # Input layer

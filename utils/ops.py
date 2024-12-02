@@ -24,7 +24,7 @@ def instance_norm(x, eps=1e-5):
     return (x - mean) / (std + eps)
 
 
-def conv2d(input_, output_dim, d_h=2, d_w=2, scope='conv_0',
+def conv2d(input_, out_channels, d_h=2, d_w=2, scope='conv_0',
            conv_filters_dim=4, padding='zero', use_bias=True, pad=0):
 
     k_h = k_w = conv_filters_dim
@@ -38,17 +38,17 @@ def conv2d(input_, output_dim, d_h=2, d_w=2, scope='conv_0',
 
     # Apply convolution
     weight = torch.nn.Parameter(
-        torch.randn(output_dim, input_.size(1), k_h, k_w) * 0.02
+        torch.randn(out_channels, input_.size(1), k_h, k_w) * 0.02
     )  # Mimicking tf.random_normal_initializer(stddev=0.02)
     bias = (
-        torch.nn.Parameter(torch.zeros(output_dim)) if use_bias else None
+        torch.nn.Parameter(torch.zeros(out_channels)) if use_bias else None
     )  # Mimicking tf.constant_initializer(0)
 
     conv = F.conv2d(input_, weight, bias, stride=(d_h, d_w), padding=0)
 
     return conv
 
-def deconv2d(input_, output_dim, d_h=2, d_w=2, scope='deconv_0',
+def deconv2d(input_, out_channels, d_h=2, d_w=2, scope='deconv_0',
              conv_filters_dim=4, padding='SAME', use_bias=True):
     
     k_h = k_w = conv_filters_dim
@@ -67,10 +67,10 @@ def deconv2d(input_, output_dim, d_h=2, d_w=2, scope='deconv_0',
 
     # Weight initialization
     weight = torch.nn.Parameter(
-        torch.randn(input_.size(1), output_dim, k_h, k_w) * 0.02
+        torch.randn(input_.size(1), out_channels, k_h, k_w) * 0.02
     )  # Mimicking tf.random_normal_initializer(stddev=0.02)
     bias = (
-        torch.nn.Parameter(torch.zeros(output_dim)) if use_bias else None
+        torch.nn.Parameter(torch.zeros(out_channels)) if use_bias else None
     )  # Mimicking tf.constant_initializer(0)
 
     # Transposed convolution

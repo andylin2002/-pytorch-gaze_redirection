@@ -34,12 +34,15 @@ class Model(object):
 
         # 解包訓練數據
         self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
+        print(f"shape :\nself.x_r: {self.x_r.shape},\n self.angles_r: {self.angles_r.shape},\n self.labels: {self.labels.shape},\n self.x_t: {self.x_t.shape},\n self.angles_g: {self.angles_g.shape}\n")
 
         # 解包驗證數據
         self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
+        print(f"shape :\nself.x_valid_r: {self.x_valid_r.shape},\n self.angles_valid_r: {self.angles_valid_r.shape},\n self.labels_valid: {self.labels_valid.shape},\n self.x_valid_t: {self.x_valid_t.shape},\n self.angles_valid_g: {self.angles_valid_g.shape}\n")
 
         # 解包測試數據
         self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
+        print(f"shape :\nself.x_test_r: {self.x_test_r.shape},\n self.angles_test_r: {self.angles_test_r.shape},\n self.labels_test: {self.labels_test.shape},\n self.x_test_t: {self.x_test_t.shape},\n self.angles_test_g: {self.angles_test_g.shape}\n")
 
         self.x_g = generator(self.x_r, self.angles_g)
         self.x_recon = generator(self.x_g, self.angles_r, reuse=True)
@@ -85,8 +88,8 @@ class Model(object):
 
         train_dataset_num = len(image_data_class.train_images)
         test_dataset_num = len(image_data_class.test_images)
-        print(train_dataset_num)
-        print(test_dataset_num)
+        print(f"train dataset number: {train_dataset_num}")
+        print(f"test dataset number: {test_dataset_num}")
 
         '''train_data'''
 
