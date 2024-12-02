@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 
 
-def instance_norm(x, eps=1e-5):
+def instance_norm(x, eps=1e-5, scope=None):
     """
     Instance Normalization.
 
@@ -110,9 +110,9 @@ def l2_loss(x, y):
 def content_loss(endpoints_mixed, content_layers):
    
     loss = 0
-    for layer in content_layers:
+    for layer in content_layers: # endpoints_mixed.shape = [32+32, 512, 4, 4]
         # Split the tensor along the batch dimension into two halves
-        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=2, dim=0)
+        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=32, dim=0)
         
         # Compute L2 loss and normalize by the size of the tensor
         size = feat_a.numel()  # Total number of elements in feat_a
@@ -123,9 +123,9 @@ def content_loss(endpoints_mixed, content_layers):
 def style_loss(endpoints_mixed, style_layers):
     
     loss = 0
-    for layer in style_layers:
+    for layer in style_layers: # endpoints_mixed.shape = [32+32, 512, 4, 4]
         # Split the tensor along the batch dimension into two halves
-        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=2, dim=0)
+        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=32, dim=0)
 
         # Compute the size of the tensor
         size = feat_a.numel()

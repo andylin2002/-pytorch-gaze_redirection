@@ -18,6 +18,8 @@ from torchvision.utils import save_image
 
 from utils.ops import l1_loss, content_loss, style_loss, angular_error
 
+import torchvision.models as models
+
 class Model(object):
     def __init__(self, params):
         self.params = params  # 存儲傳遞的參數
@@ -45,7 +47,7 @@ class Model(object):
         print(f"shape :\nself.x_test_r: {self.x_test_r.shape},\n self.angles_test_r: {self.angles_test_r.shape},\n self.labels_test: {self.labels_test.shape},\n self.x_test_t: {self.x_test_t.shape},\n self.angles_test_g: {self.angles_test_g.shape}\n")
 
         self.x_g = generator(self.x_r, self.angles_g)
-        self.x_recon = generator(self.x_g, self.angles_r, reuse=True)
+        self.x_recon = generator(self.x_g, self.angles_r)
 
         self.angles_valid_g = (torch.rand(params.batch_size, 2) * 2.0) - 1.0
 
@@ -194,33 +196,32 @@ class Model(object):
         return d_loss, g_loss, reg_loss_d, reg_loss_g, gp
 
     def feat_loss(self):
+
+        hps = self.params
         
         # 定義 VGG 模型和需要的層名稱
-        content_layers = ["features.28"]  # conv5_3
+        content_layers = ["conv5"]  # conv5_3
         style_layers = [
-            "features.3",   # conv1_2
-            "features.8",   # conv2_2
-            "features.15",  # conv3_3
-            "features.22"   # conv4_3
+            "conv1",   # conv1_2
+            "conv2",   # conv2_2
+            "conv3",  # conv3_3
+            "conv4"   # conv4_3
         ]
 
-        # 加載預訓練的 VGG16 模型
-        vgg = vgg_16(pretrained=True).features.to(self.x_g.device).eval()
+        # 拼接輸入：將 x_g 和 x_t 合併在一起
+        inputs = torch.cat([self.x_g, self.x_t], dim=0) # shape = [32+32, 3, 64, 64]
 
+        # 加載預訓練的 VGG16 模型
+        _, end_points = vgg_16(inputs, hps, pretrained=True)
+        '''
         # 禁止更新 VGG 的權重
         for param in vgg.parameters():
             param.requires_grad = False
-
-        # 拼接輸入：將 x_g 和 x_t 合併在一起
-        inputs = torch.cat([self.x_g, self.x_t], dim=0)
-
+        '''
         # 通過 VGG 網絡，收集中間層的輸出
         endpoints_mixed = {}
-        x = inputs
-        for name, layer in vgg._modules.items():
-            x = layer(x)
-            if f"features.{name}" in content_layers + style_layers:
-                endpoints_mixed[f"features.{name}"] = x
+        for layer in content_layers + style_layers:
+            endpoints_mixed[layer] = end_points[layer]
 
         # 計算內容損失和風格損失
         c_loss = content_loss(endpoints_mixed, content_layers)
