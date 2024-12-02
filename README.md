@@ -10,7 +10,7 @@ Python == 3.10.15
 python main.py --mode train --data_path /home/andy/AILab/AIfinal/pytorch_gaze_redirection-master/eyespatch_dataset/all --log_dir ./log/ --vgg_path ./vgg_16.ckpt
 ```
 
-## VGG16 pretrain weight
+## VGG16 pretrained weights
 ```Bash
 wget https://s3.amazonaws.com/amdegroot-models/vgg16_reducedfc.pth
 ```
