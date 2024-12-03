@@ -20,11 +20,12 @@ from utils.ops import l1_loss, content_loss, style_loss, angular_error
 
 import torchvision.models as models
 
-class Model(object):
+class Model(nn.Module):
     def __init__(self, params):
+        super(Model, self).__init__()
         self.params = params  # 存儲傳遞的參數
         self.global_step = torch.tensor(0, dtype=torch.int32, requires_grad=False)  # 全局步數
-        self.lr = None  # PyTorch 不需要明確的 placeholder，學習率直接用變數傳遞
+        self.lr = params.lr
 
         (self.train_iter, self.valid_iter,
          self.test_iter, self.train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
@@ -85,7 +86,6 @@ class Model(object):
 
         # update operations for generator and discriminator
         self.d_op, self.g_op, self.d_loss, self.g_loss = self.add_optimizer()
-
 
         def init_weights(m):
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
@@ -199,9 +199,6 @@ class Model(object):
         slopes = torch.sqrt(torch.sum(grad**2, dim=[1, 2, 3]))
         gp = torch.mean((slopes - 1)**2)
 
-        # 釋放梯度計算圖
-        del grad
-
         # 判別器損失 (Discriminator Loss)
         adv_d_loss = (-torch.mean(gan_real) +
                 torch.mean(gan_fake) +
@@ -211,10 +208,10 @@ class Model(object):
         adv_g_loss = -torch.mean(gan_fake) # 加負號
 
         # 迴歸損失 (Regression Loss)
-        reg_loss_d = F.mse_loss(self.angles_r, reg_real)
-        reg_loss_g = F.mse_loss(self.angles_g, reg_fake)
+        reg_d_loss = F.mse_loss(self.angles_r, reg_real)
+        reg_g_loss = F.mse_loss(self.angles_g, reg_fake)
 
-        return adv_d_loss, adv_g_loss, reg_loss_d, reg_loss_g, gp
+        return adv_d_loss, adv_g_loss, reg_d_loss, reg_g_loss, gp
 
     def feat_loss(self):
 
@@ -257,8 +254,6 @@ class Model(object):
         if hps.optimizer == 'sgd':
             return optim.SGD(model.parameters(), lr=lr)
         if hps.optimizer == 'adam':
-            print(hps.adam_beta1)
-            print(hps.adam_beta2)
             return optim.Adam(model.parameters(),
                             lr=lr,
                             betas=(hps.adam_beta1, hps.adam_beta2))
@@ -341,9 +336,7 @@ class Model(object):
             # PyTorch 不需要顯式設定動態記憶體增長，它會自動優化 GPU 記憶體使用
         else:
             device = torch.device("cpu")
-        #print(f"Using device: {device}")
-
-        optimizer_d, optimizer_g, loss_d, loss_g = self.add_optimizer()
+        print(f"Using device: {device}")
 
         torch.autograd.set_detect_anomaly(True)
 
@@ -354,22 +347,23 @@ class Model(object):
                 # 動態調整學習率
                 if epoch >= num_epoch // 2:
                     learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
-                    for param_group in optimizer_d.param_groups:
+                    print(self.d_op.param_groups)
+                    for param_group in self.d_op.param_groups:
                         param_group['lr'] = learning_rate
-                    for param_group in optimizer_g.param_groups:
+                    for param_group in self.d_op.param_groups:
                         param_group['lr'] = learning_rate
 
                 for it in range(num_iter):
                     # 訓練 Discriminator
-                    optimizer_d.zero_grad()
-                    loss_d.backward()
-                    optimizer_d.step()
+                    self.d_op.zero_grad()
+                    self.d_loss.backward()
+                    self.d_op.step()
 
                     # 訓練 Generator (每 5 步執行一次)
                     if it % 5 == 0:
-                        optimizer_g.zero_grad()
-                        loss_g.backward()
-                        optimizer_g.step()
+                        self.g_op.zero_grad()
+                        self.g_loss.backward()
+                        self.g_op.step()
 
                     # 記錄摘要和保存模型
                     if it % hps.summary_steps == 0:
@@ -379,11 +373,11 @@ class Model(object):
                         self.add_summary(summary_writer, self.global_step)
 
                         # 保存模型權重
-                        torch.save(self.model.state_dict(), f"{model_path}_{self.global_step}.pth")
+                        torch.save(self.state_dict(), f"{model_path}_{self.global_step}.pth")
 
         except KeyboardInterrupt:
             print("Training interrupted. Saving model...")
-            torch.save(self.model.state_dict(), f"{model_path}_final.pth")
+            torch.save(self.state_dict(), f"{model_path}_final.pth")
 
         finally:
             summary_writer.close()
