@@ -19,7 +19,7 @@ wget https://s3.amazonaws.com/amdegroot-models/vgg16_reducedfc.pth
 ```
 git push -u origin
 ```
-# if "rejected because the remote contains work that you do not have locally."
+### if "rejected because the remote contains work that you do not have locally."
 ```
 git pull --rebase
 ```
