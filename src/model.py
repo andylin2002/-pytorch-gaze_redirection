@@ -23,69 +23,15 @@ import torchvision.models as models
 class Model(nn.Module):
     def __init__(self, params):
         super(Model, self).__init__()
+        self.generator = Generator(style_dim=2)
+        self.discriminator = Discriminator(params)
+
         self.params = params  # 存儲傳遞的參數
         self.global_step = torch.tensor(0, dtype=torch.int32, requires_grad=False)  # 全局步數
         self.lr = params.lr
 
         (self.train_iter, self.valid_iter,
          self.test_iter, self.train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
-        
-        # 從 DataLoader 提取批次數據
-        train_batch = next(iter(self.train_iter))
-        valid_batch = next(iter(self.valid_iter))
-        test_batch = next(iter(self.test_iter))
-
-        # 解包訓練數據
-        self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
-        '''
-        self.x_r: torch.Size([32, 3, 64, 64]),
-        self.angles_r: torch.Size([32, 2]),
-        self.labels: torch.Size([32]),
-        self.x_t: torch.Size([32, 3, 64, 64]),
-        self.angles_g: torch.Size([32, 2])
-        '''
-
-        # 解包驗證數據
-        self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
-        '''
-        self.x_valid_r: torch.Size([32, 3, 64, 64]),
-        self.angles_valid_r: torch.Size([32, 2]),
-        self.labels_valid: torch.Size([32]),
-        self.x_valid_t: torch.Size([32, 3, 64, 64]),
-        self.angles_valid_g: torch.Size([32, 2])
-        '''
-
-        # 解包測試數據
-        self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
-        '''
-        self.x_test_r: torch.Size([32, 3, 64, 64]),
-        self.angles_test_r: torch.Size([32, 2]),
-        self.labels_test: torch.Size([32]),
-        self.x_test_t: torch.Size([32, 3, 64, 64]),
-        self.angles_test_g: torch.Size([32, 2])
-        '''
-        self.generator = Generator(style_dim=2)
-        self.discriminator = Discriminator(params)
-
-        self.x_g = self.generator(self.x_r, self.angles_g)
-        self.x_recon = self.generator(self.x_g, self.angles_r)
-
-        self.angles_valid_g = (torch.rand(params.batch_size, 2) * 2.0) - 1.0
-
-        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
-
-        # reconstruction loss
-        self.recon_loss = l1_loss(self.x_r, self.x_recon)
-
-        # content loss and style loss
-        self.c_loss, self.s_loss = self.feat_loss()
-
-        # regression losses and adversarial losses
-        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
-         self.reg_g_loss, self.gp) = self.adv_loss()
-
-        # update operations for generator and discriminator
-        self.d_op, self.g_op, self.d_loss, self.g_loss = self.add_optimizer()
 
         def init_weights(m):
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
@@ -272,19 +218,13 @@ class Model(nn.Module):
         g_op = self.optimizer(hps.lr, self.generator)
         d_op = self.optimizer(hps.lr, self.discriminator)
 
-        # 計算損失
-        g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
-                50.0 * self.recon_loss +
-                100.0 * self.s_loss + 100.0 * self.c_loss)
-        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
-
         '''
         # 設置優化器的參數範圍
         g_op.add_param_group({'params': g_vars})
         d_op.add_param_group({'params': d_vars})
         '''
 
-        return d_op, g_op, d_loss, g_loss
+        return d_op, g_op
     
     def add_summary(self, writer: SummaryWriter, step: int):
 
@@ -321,7 +261,7 @@ class Model(nn.Module):
         batch_size = hps.batch_size
         learning_rate = hps.lr
 
-        num_iter = train_size // batch_size
+        num_iter = train_size // batch_size # num_iter = 1102
 
         # 日誌與模型路徑
         summary_dir = os.path.join(hps.log_dir, 'summary')
@@ -338,49 +278,109 @@ class Model(nn.Module):
             device = torch.device("cpu")
         print(f"Using device: {device}")
 
-        torch.autograd.set_detect_anomaly(True)
+        with torch.autograd.set_detect_anomaly(True):
+            try:
+                for epoch in range(num_epoch):
+                    print(f"Epoch: {epoch+1}/{num_epoch}")
 
-        try:
-            for epoch in range(num_epoch):
-                print(f"Epoch: {epoch+1}/{num_epoch}")
+                    # update operations for generator and discriminator
+                    self.d_op, self.g_op = self.add_optimizer()
 
-                # 動態調整學習率
-                if epoch >= num_epoch // 2:
-                    learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
-                    print(self.d_op.param_groups)
-                    for param_group in self.d_op.param_groups:
-                        param_group['lr'] = learning_rate
-                    for param_group in self.d_op.param_groups:
-                        param_group['lr'] = learning_rate
+                    # 動態調整學習率
+                    if epoch >= num_epoch // 2:
+                        learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
+                        print(self.d_op.param_groups)
+                        for param_group in self.d_op.param_groups:
+                            param_group['lr'] = learning_rate
+                        for param_group in self.d_op.param_groups:
+                            param_group['lr'] = learning_rate
 
-                for it in range(num_iter):
-                    # 訓練 Discriminator
-                    self.d_op.zero_grad()
-                    self.d_loss.backward()
-                    self.d_op.step()
+                    for it in range(num_iter):
+                        # 從 DataLoader 提取批次數據
+                        train_batch = next(iter(self.train_iter))
+                        valid_batch = next(iter(self.valid_iter))
+                        test_batch = next(iter(self.test_iter))
 
-                    # 訓練 Generator (每 5 步執行一次)
-                    if it % 5 == 0:
-                        self.g_op.zero_grad()
-                        self.g_loss.backward()
-                        self.g_op.step()
+                        # 解包訓練數據
+                        self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
+                        '''
+                        self.x_r: torch.Size([32, 3, 64, 64]),
+                        self.angles_r: torch.Size([32, 2]),
+                        self.labels: torch.Size([32]),
+                        self.x_t: torch.Size([32, 3, 64, 64]),
+                        self.angles_g: torch.Size([32, 2])
+                        '''
 
-                    # 記錄摘要和保存模型
-                    if it % hps.summary_steps == 0:
-                        self.global_step = epoch * num_iter + it
+                        # 解包驗證數據
+                        self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
+                        '''
+                        self.x_valid_r: torch.Size([32, 3, 64, 64]),
+                        self.angles_valid_r: torch.Size([32, 2]),
+                        self.labels_valid: torch.Size([32]),
+                        self.x_valid_t: torch.Size([32, 3, 64, 64]),
+                        self.angles_valid_g: torch.Size([32, 2])
+                        '''
 
-                        # 使用自定義的 add_summary 函式
-                        self.add_summary(summary_writer, self.global_step)
+                        # 解包測試數據
+                        self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
+                        '''
+                        self.x_test_r: torch.Size([32, 3, 64, 64]),
+                        self.angles_test_r: torch.Size([32, 2]),
+                        self.labels_test: torch.Size([32]),
+                        self.x_test_t: torch.Size([32, 3, 64, 64]),
+                        self.angles_test_g: torch.Size([32, 2])
+                        '''
 
-                        # 保存模型權重
-                        torch.save(self.state_dict(), f"{model_path}_{self.global_step}.pth")
+                        self.x_g = self.generator(self.x_r, self.angles_g).requires_grad_(True)
+                        self.x_recon = self.generator(self.x_g, self.angles_r).requires_grad_(True)
 
-        except KeyboardInterrupt:
-            print("Training interrupted. Saving model...")
-            torch.save(self.state_dict(), f"{model_path}_final.pth")
+                        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
 
-        finally:
-            summary_writer.close()
+                        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+
+                        # reconstruction loss
+                        self.recon_loss = l1_loss(self.x_r, self.x_recon)
+
+                        # content loss and style loss
+                        self.c_loss, self.s_loss = self.feat_loss()
+
+                        # regression losses and adversarial losses
+                        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
+                        self.reg_g_loss, self.gp) = self.adv_loss()
+
+                        # 計算損失
+                        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
+                        g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
+                                    50.0 * self.recon_loss +
+                                    100.0 * self.s_loss + 100.0 * self.c_loss)
+
+                        # 訓練 Discriminator
+                        self.d_op.zero_grad()
+                        d_loss.backward()
+                        self.d_op.step()
+                        
+                        # 訓練 Generator (每 5 步執行一次)
+                        if it % 5 == 0:
+                            self.g_op.zero_grad()
+                            g_loss.backward()
+                            self.g_op.step()
+                        
+                        # 記錄摘要和保存模型
+                        if it % hps.summary_steps == 0:
+                            self.global_step = epoch * num_iter + it
+
+                            # 使用自定義的 add_summary 函式
+                            self.add_summary(summary_writer, self.global_step)
+
+                            # 保存模型權重
+                            torch.save(self.state_dict(), f"{model_path}_{self.global_step}.pth")
+
+            except KeyboardInterrupt:
+                print("Training interrupted. Saving model...")
+                torch.save(self.state_dict(), f"{model_path}_final.pth")
+
+            finally:
+                summary_writer.close()
 
 
 

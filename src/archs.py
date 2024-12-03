@@ -42,8 +42,8 @@ class Discriminator(nn.Module):
         x_gan = self.conv_gan(x)
 
         # 回歸輸出層
-        x_reg = self.conv_reg(x)
-        x_reg = x_reg.view(x_reg.size(0), -1)  # 平坦化輸出
+        x_reg = self.conv_reg(x) # [32, 2, 1, 1]
+        x_reg = x_reg.view(x_reg.size(0), -1)  # 平坦化輸出 [32, 2]
 
         return x_gan, x_reg
     
