@@ -48,6 +48,10 @@ class Discriminator(nn.Module):
         x_reg = x_reg.view(x_reg.size(0), -1)  # 平坦化輸出
 
         return x_gan, x_reg
+    
+    def named_parameters_with_prefix(self, prefix='discriminator'):
+        for name, param in self.named_parameters():
+            yield f"{prefix}.{name}", param
 
 class Generator(nn.Module):
     def __init__(self, style_dim=2):

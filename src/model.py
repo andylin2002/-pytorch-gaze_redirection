@@ -264,8 +264,8 @@ class Model(object):
     def add_optimizer(self):
 
         # 獲取模型參數
-        g_vars = [p for n, p in self.named_parameters() if 'generator' in n]
-        d_vars = [p for n, p in self.named_parameters() if 'discriminator' in n]
+        g_vars = [p for n, p in self.generator.named_parameters()]
+        d_vars = [p for n, p in self.discriminator.named_parameters()]
 
         # 創建優化器
         g_op = self.optimizer(self.lr)

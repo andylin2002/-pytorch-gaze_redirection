@@ -51,6 +51,10 @@ class Discriminator(nn.Module):
         x_reg = x_reg.view(x_reg.size(0), -1)  # 平坦化輸出
 
         return x_gan, x_reg
+    
+    def named_parameters_with_prefix(self, prefix='discriminator'):
+        for name, param in self.named_parameters():
+            yield f"{prefix}.{name}", param
 
 
 # 測試程式碼
@@ -58,5 +62,5 @@ params = SimpleNamespace(image_size=64)
 discriminator = Discriminator(params)
 input_ = torch.randn(32, 3, 64, 64)
 x_gan, x_reg = discriminator(input_)
-print(x_gan.shape)
-print(x_reg.shape)
+for name, param in discriminator.named_parameters_with_prefix():
+    print(f"Name: {name}, Shape: {param.shape}")
