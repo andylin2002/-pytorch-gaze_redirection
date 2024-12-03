@@ -14,3 +14,12 @@ python main.py --mode train --data_path /home/andy/AILab/AIfinal/pytorch_gaze_re
 ```Bash
 wget https://s3.amazonaws.com/amdegroot-models/vgg16_reducedfc.pth
 ```
+
+## Push
+```
+git push -u origin
+```
+# if "rejected because the remote contains work that you do not have locally."
+```
+git pull --rebase
+```
