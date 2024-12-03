@@ -32,13 +32,11 @@ class Discriminator(nn.Module):
 
     def forward(self, x_init):
         # 第一層卷積
-        x = self.conv1(x_init)
-        x = F.leaky_relu(x, negative_slope=0.2)  # 使用 PyTorch 的 Leaky ReLU
+        x = F.leaky_relu(self.conv1(x_init), negative_slope=0.2)
 
         # 堆疊中間層
         for conv in self.conv_layers:
-            x = conv(x)
-            x = F.leaky_relu(x, negative_slope=0.2)
+            x = F.leaky_relu(conv(x), negative_slope=0.2)
 
         # GAN 輸出層
         x_gan = self.conv_gan(x)
@@ -94,7 +92,7 @@ class Generator(nn.Module):
         return nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.InstanceNorm2d(channels, affine=False),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Conv2d(channels, channels, kernel_size=3, stride=1, padding=1, bias=False),
             nn.InstanceNorm2d(channels, affine=False)
         )
@@ -158,7 +156,7 @@ def vgg_16(inputs, hps, pretrained = True):
         layers = []
         for i in range(num_layers):
             layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
-            layers.append(nn.ReLU(inplace=True))
+            layers.append(nn.ReLU(inplace=False))
             in_channels = out_channels
         return nn.Sequential(*layers), f"{layer_scope}"
 

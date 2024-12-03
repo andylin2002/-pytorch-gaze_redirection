@@ -80,14 +80,12 @@ class Model(object):
         self.c_loss, self.s_loss = self.feat_loss()
 
         # regression losses and adversarial losses
-        (self.d_loss, self.g_loss, self.reg_d_loss,
+        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
          self.reg_g_loss, self.gp) = self.adv_loss()
 
         # update operations for generator and discriminator
-        self.d_op, self.g_op = self.add_optimizer()
+        self.d_op, self.g_op, self.d_loss, self.g_loss = self.add_optimizer()
 
-        # adding summaries
-        self.summary = self.add_summary()
 
         def init_weights(m):
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
@@ -185,7 +183,7 @@ class Model(object):
         # 生成插值樣本
         eps = torch.rand((hps.batch_size, 1, 1, 1), device=self.x_r.device)
         interpolated = eps * self.x_r + (1. - eps) * self.x_g
-        interpolated.requires_grad_(True)
+        interpolated = interpolated.detach().requires_grad_(True)
 
         gan_inter, _ = self.discriminator(interpolated)
 
@@ -201,19 +199,22 @@ class Model(object):
         slopes = torch.sqrt(torch.sum(grad**2, dim=[1, 2, 3]))
         gp = torch.mean((slopes - 1)**2)
 
+        # 釋放梯度計算圖
+        del grad
+
         # 判別器損失 (Discriminator Loss)
-        d_loss = (-torch.mean(gan_real) +
+        adv_d_loss = (-torch.mean(gan_real) +
                 torch.mean(gan_fake) +
                 10.0 * gp)
 
         # 生成器損失 (Generator Loss)
-        g_loss = -torch.mean(gan_fake)
+        adv_g_loss = -torch.mean(gan_fake) # 加負號
 
         # 迴歸損失 (Regression Loss)
         reg_loss_d = F.mse_loss(self.angles_r, reg_real)
         reg_loss_g = F.mse_loss(self.angles_g, reg_fake)
 
-        return d_loss, g_loss, reg_loss_d, reg_loss_g, gp
+        return adv_d_loss, adv_g_loss, reg_loss_d, reg_loss_g, gp
 
     def feat_loss(self):
 
@@ -249,37 +250,44 @@ class Model(object):
 
         return c_loss, s_loss
     
-    def optimizer(self, lr):
+    def optimizer(self, lr, model):
 
         hps = self.params
 
         if hps.optimizer == 'sgd':
-            return optim.SGD(self.parameters(), lr=lr)
+            return optim.SGD(model.parameters(), lr=lr)
         if hps.optimizer == 'adam':
-            return optim.Adam(self.parameters(),
+            print(hps.adam_beta1)
+            print(hps.adam_beta2)
+            return optim.Adam(model.parameters(),
                             lr=lr,
                             betas=(hps.adam_beta1, hps.adam_beta2))
         raise AttributeError("attribute 'optimizer' is not assigned!")
 
     def add_optimizer(self):
 
+        hps = self.params
+        '''
         # 獲取模型參數
-        g_vars = [p for n, p in self.generator.named_parameters()]
-        d_vars = [p for n, p in self.discriminator.named_parameters()]
+        g_vars = [p for _, p in self.generator.named_parameters()]
+        d_vars = [p for _, p in self.discriminator.named_parameters()]
+        '''
 
         # 創建優化器
-        g_op = self.optimizer(self.lr)
-        d_op = self.optimizer(self.lr)
+        g_op = self.optimizer(hps.lr, self.generator)
+        d_op = self.optimizer(hps.lr, self.discriminator)
 
         # 計算損失
-        g_loss = (self.g_loss + 5.0 * self.reg_g_loss +
+        g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
                 50.0 * self.recon_loss +
                 100.0 * self.s_loss + 100.0 * self.c_loss)
-        d_loss = self.d_loss + 5.0 * self.reg_d_loss
+        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
 
+        '''
         # 設置優化器的參數範圍
-        g_op.param_groups = [{'params': g_vars}]
-        d_op.param_groups = [{'params': d_vars}]
+        g_op.add_param_group({'params': g_vars})
+        d_op.add_param_group({'params': d_vars})
+        '''
 
         return d_op, g_op, d_loss, g_loss
     
@@ -287,8 +295,8 @@ class Model(object):
 
         # 記錄標量
         writer.add_scalar('Loss/recon_loss', self.recon_loss.item(), step)
-        writer.add_scalar('Loss/g_loss', self.g_loss.item(), step)
-        writer.add_scalar('Loss/d_loss', self.d_loss.item(), step)
+        writer.add_scalar('Loss/adv_g_loss', self.adv_g_loss.item(), step)
+        writer.add_scalar('Loss/adv_d_loss', self.adv_d_loss.item(), step)
         writer.add_scalar('Loss/reg_d_loss', self.reg_d_loss.item(), step)
         writer.add_scalar('Loss/reg_g_loss', self.reg_g_loss.item(), step)
         writer.add_scalar('Metrics/gp', self.gp.item(), step)
@@ -336,6 +344,8 @@ class Model(object):
         #print(f"Using device: {device}")
 
         optimizer_d, optimizer_g, loss_d, loss_g = self.add_optimizer()
+
+        torch.autograd.set_detect_anomaly(True)
 
         try:
             for epoch in range(num_epoch):
