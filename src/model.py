@@ -36,15 +36,33 @@ class Model(object):
 
         # 解包訓練數據
         self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
-        print(f"shape :\nself.x_r: {self.x_r.shape},\n self.angles_r: {self.angles_r.shape},\n self.labels: {self.labels.shape},\n self.x_t: {self.x_t.shape},\n self.angles_g: {self.angles_g.shape}\n")
+        '''
+        self.x_r: torch.Size([32, 3, 64, 64]),
+        self.angles_r: torch.Size([32, 2]),
+        self.labels: torch.Size([32]),
+        self.x_t: torch.Size([32, 3, 64, 64]),
+        self.angles_g: torch.Size([32, 2])
+        '''
 
         # 解包驗證數據
         self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
-        print(f"shape :\nself.x_valid_r: {self.x_valid_r.shape},\n self.angles_valid_r: {self.angles_valid_r.shape},\n self.labels_valid: {self.labels_valid.shape},\n self.x_valid_t: {self.x_valid_t.shape},\n self.angles_valid_g: {self.angles_valid_g.shape}\n")
+        '''
+        self.x_valid_r: torch.Size([32, 3, 64, 64]),
+        self.angles_valid_r: torch.Size([32, 2]),
+        self.labels_valid: torch.Size([32]),
+        self.x_valid_t: torch.Size([32, 3, 64, 64]),
+        self.angles_valid_g: torch.Size([32, 2])
+        '''
 
         # 解包測試數據
         self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
-        print(f"shape :\nself.x_test_r: {self.x_test_r.shape},\n self.angles_test_r: {self.angles_test_r.shape},\n self.labels_test: {self.labels_test.shape},\n self.x_test_t: {self.x_test_t.shape},\n self.angles_test_g: {self.angles_test_g.shape}\n")
+        '''
+        self.x_test_r: torch.Size([32, 3, 64, 64]),
+        self.angles_test_r: torch.Size([32, 2]),
+        self.labels_test: torch.Size([32]),
+        self.x_test_t: torch.Size([32, 3, 64, 64]),
+        self.angles_test_g: torch.Size([32, 2])
+        '''
 
         self.x_g = generator(self.x_r, self.angles_g)
         self.x_recon = generator(self.x_g, self.angles_r)
