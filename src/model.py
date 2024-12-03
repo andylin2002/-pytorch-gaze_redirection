@@ -151,7 +151,7 @@ class Model(nn.Module):
                 10.0 * gp)
 
         # 生成器損失 (Generator Loss)
-        adv_g_loss = -torch.mean(gan_fake) # 加負號
+        adv_g_loss = -torch.mean(gan_fake) 
 
         # 迴歸損失 (Regression Loss)
         reg_d_loss = F.mse_loss(self.angles_r, reg_real)
@@ -331,8 +331,8 @@ class Model(nn.Module):
                         self.angles_test_g: torch.Size([32, 2])
                         '''
 
-                        self.x_g = self.generator(self.x_r, self.angles_g).requires_grad_(True)
-                        self.x_recon = self.generator(self.x_g, self.angles_r).requires_grad_(True)
+                        self.x_g = self.generator(self.x_r, self.angles_g).detach()
+                        self.x_recon = self.generator(self.x_g, self.angles_r)
 
                         self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
 
@@ -348,22 +348,43 @@ class Model(nn.Module):
                         (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
                         self.reg_g_loss, self.gp) = self.adv_loss()
 
-                        # 計算損失
-                        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
-                        g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
-                                    50.0 * self.recon_loss +
-                                    100.0 * self.s_loss + 100.0 * self.c_loss)
-
                         # 訓練 Discriminator
                         self.d_op.zero_grad()
+
+                        # 暫時固定 Generator 的參數
+                        for param in self.generator.parameters():
+                            param.requires_grad = False
+
+                        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
+
+                        print("train discriminator...")
                         d_loss.backward()
                         self.d_op.step()
-                        
+
+                        # 解鎖 Generator 的參數
+                        for param in self.generator.parameters():
+                            param.requires_grad = True
+
                         # 訓練 Generator (每 5 步執行一次)
                         if it % 5 == 0:
                             self.g_op.zero_grad()
+
+                            # 暫時固定 Discriminator 的參數
+                            for param in self.discriminator.parameters():
+                                param.requires_grad = False
+
+                            g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
+                                    50.0 * self.recon_loss +
+                                    100.0 * self.s_loss + 100.0 * self.c_loss)
+
+                            print("train generator...")
                             g_loss.backward()
                             self.g_op.step()
+
+                            # 解鎖 Discriminator 的參數
+                            for param in self.discriminator.parameters():
+                                param.requires_grad = True
+
                         
                         # 記錄摘要和保存模型
                         if it % hps.summary_steps == 0:

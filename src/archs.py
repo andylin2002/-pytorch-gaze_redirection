@@ -39,11 +39,12 @@ class Discriminator(nn.Module):
             x = F.leaky_relu(conv(x), negative_slope=0.2)
 
         # GAN 輸出層
-        x_gan = self.conv_gan(x)
+        x_gan = self.conv_gan(x) # x_gan.shape = [32, 1, 1, 1]
+        x_gan = x_gan.view(x_gan.size(0), -1) # x_gan.shape = [32, 1]
 
         # 回歸輸出層
-        x_reg = self.conv_reg(x) # [32, 2, 1, 1]
-        x_reg = x_reg.view(x_reg.size(0), -1)  # 平坦化輸出 [32, 2]
+        x_reg = self.conv_reg(x) # x_reg.shape = [32, 2, 1, 1]
+        x_reg = x_reg.view(x_reg.size(0), -1)  # x_reg.shape = [32, 2]
 
         return x_gan, x_reg
     
