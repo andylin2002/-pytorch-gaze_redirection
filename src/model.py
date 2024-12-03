@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from src.archs import discriminator, generator, vgg_16
+from src.archs import Discriminator, Generator, vgg_16
 from src.data_loader import ImageData
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -63,13 +63,15 @@ class Model(object):
         self.x_test_t: torch.Size([32, 3, 64, 64]),
         self.angles_test_g: torch.Size([32, 2])
         '''
+        self.generator = Generator(style_dim=2)
+        self.discriminator = Discriminator(params)
 
-        self.x_g = generator(self.x_r, self.angles_g)
-        self.x_recon = generator(self.x_g, self.angles_r)
+        self.x_g = self.generator(self.x_r, self.angles_g)
+        self.x_recon = self.generator(self.x_g, self.angles_r)
 
         self.angles_valid_g = (torch.rand(params.batch_size, 2) * 2.0) - 1.0
 
-        self.x_valid_g = generator(self.x_valid_r, self.angles_valid_g)
+        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
 
         # reconstruction loss
         self.recon_loss = l1_loss(self.x_r, self.x_recon)
@@ -93,8 +95,8 @@ class Model(object):
                 if m.bias is not None:
                     torch.nn.init.zeros_(m.bias)  # 偏置初始化為 0
 
-        generator.apply(init_weights)
-        discriminator.apply(init_weights)
+        self.generator.apply(init_weights)
+        self.discriminator.apply(init_weights)
 
     def data_loader(self):##
         
@@ -177,15 +179,15 @@ class Model(object):
         hps = self.params
 
         # 判別器對真實樣本和生成樣本的輸出
-        gan_real, reg_real = discriminator(hps, self.x_r)
-        gan_fake, reg_fake = discriminator(hps, self.x_g)
+        gan_real, reg_real = self.discriminator(self.x_r)
+        gan_fake, reg_fake = self.discriminator(self.x_g)
 
         # 生成插值樣本
         eps = torch.rand((hps.batch_size, 1, 1, 1), device=self.x_r.device)
         interpolated = eps * self.x_r + (1. - eps) * self.x_g
         interpolated.requires_grad_(True)
 
-        gan_inter, _ = discriminator(hps, interpolated)
+        gan_inter, _ = self.discriminator(interpolated)
 
         # 計算梯度懲罰（Gradient Penalty）
         grad = torch.autograd.grad(
