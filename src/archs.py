@@ -146,10 +146,7 @@ class Generator(nn.Module):
         for name, param in self.named_parameters():
             yield f"{prefix}.{name}", param
 
-def vgg_16(inputs, hps, pretrained = True):
-
-    if pretrained:
-        pretrained_path = hps.vgg_path
+def vgg_16(self, inputs, hps):
 
     end_points = {}
 
@@ -195,13 +192,10 @@ def vgg_16(inputs, hps, pretrained = True):
     })
 
     # 如果提供了預訓練權重的路徑，則載入
-    if pretrained_path:
-        state_dict = torch.load(pretrained_path, map_location=torch.device('cpu'), weights_only=True)
-        try:
-            model_dict.load_state_dict(state_dict, strict=False)  # 若權重名稱不完全匹配，允許部分載入
-            print(f"Successfully loaded pretrained weights from {pretrained_path}")
-        except RuntimeError as e:
-            print(f"Error loading pretrained weights: {e}")
+    try:
+        model_dict.load_state_dict(self.vgg_dict, strict=False)  # 若權重名稱不完全匹配，允許部分載入
+    except RuntimeError as e:
+        print(f"Error loading pretrained weights: {e}")
 
     # Forward pass
     x = model_dict['conv1'](inputs)

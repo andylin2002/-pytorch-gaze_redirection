@@ -25,6 +25,10 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.generator = Generator(style_dim=2)
         self.discriminator = Discriminator(params)
+        if params.vgg_path:
+            vgg_dict = torch.load(params.vgg_path, map_location=torch.device('cpu'), weights_only=True)
+            self.vgg_dict = vgg_dict
+            print(f"Successfully loaded pretrained weights from {params.vgg_path}")
 
         self.params = params  # 存儲傳遞的參數
         self.global_step = torch.tensor(0, dtype=torch.int32, requires_grad=False)  # 全局步數
@@ -176,7 +180,7 @@ class Model(nn.Module):
         inputs = torch.cat([self.x_g, self.x_t], dim=0) # shape = [32+32, 3, 64, 64]
 
         # 加載預訓練的 VGG16 模型
-        _, end_points = vgg_16(inputs, hps, pretrained=True)
+        _, end_points = vgg_16(self,inputs, hps)
         '''
         # 禁止更新 VGG 的權重
         for param in vgg.parameters():
@@ -296,6 +300,7 @@ class Model(nn.Module):
                             param_group['lr'] = learning_rate
 
                     for it in range(num_iter):
+                        print(f"batch: {it}/{num_iter}")
                         # 從 DataLoader 提取批次數據
                         train_batch = next(iter(self.train_iter))
                         valid_batch = next(iter(self.valid_iter))
@@ -367,7 +372,7 @@ class Model(nn.Module):
 
                         # 訓練 Generator (每 5 步執行一次)
                         if it % 5 == 0:
-                            #####
+
                             self.x_g = self.generator(self.x_r, self.angles_g)
                             self.x_recon = self.generator(self.x_g, self.angles_r)
 
@@ -384,7 +389,7 @@ class Model(nn.Module):
                             # regression losses and adversarial losses
                             (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
                             self.reg_g_loss, self.gp) = self.adv_loss()
-                            #####
+
                             self.g_op.zero_grad()
 
                             # 暫時固定 Discriminator 的參數
