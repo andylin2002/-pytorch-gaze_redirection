@@ -331,7 +331,7 @@ class Model(nn.Module):
                         self.angles_test_g: torch.Size([32, 2])
                         '''
 
-                        self.x_g = self.generator(self.x_r, self.angles_g).detach()
+                        self.x_g = self.generator(self.x_r, self.angles_g)
                         self.x_recon = self.generator(self.x_g, self.angles_r)
 
                         self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
@@ -367,6 +367,24 @@ class Model(nn.Module):
 
                         # 訓練 Generator (每 5 步執行一次)
                         if it % 5 == 0:
+                            #####
+                            self.x_g = self.generator(self.x_r, self.angles_g)
+                            self.x_recon = self.generator(self.x_g, self.angles_r)
+
+                            self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
+
+                            self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+
+                            # reconstruction loss
+                            self.recon_loss = l1_loss(self.x_r, self.x_recon)
+
+                            # content loss and style loss
+                            self.c_loss, self.s_loss = self.feat_loss()
+
+                            # regression losses and adversarial losses
+                            (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
+                            self.reg_g_loss, self.gp) = self.adv_loss()
+                            #####
                             self.g_op.zero_grad()
 
                             # 暫時固定 Discriminator 的參數
