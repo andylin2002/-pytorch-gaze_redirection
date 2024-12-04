@@ -11,46 +11,42 @@ class Discriminator(nn.Module):
         self.channel = 64
         self.image_size = params.image_size
 
-        # 第一層卷積
+        # Input convolution layer
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.channel, kernel_size=4, stride=2, padding=1)
 
-        # 中間層卷積
+        # Hidden convolution layer
         self.conv_layers = nn.ModuleList([
             nn.Conv2d(in_channels=self.channel * (2 ** i), out_channels=self.channel * (2 ** (i + 1)),
                       kernel_size=4, stride=2, padding=1)
             for i in range(self.layers - 1)
         ])
 
-        # 輸出層 (GAN)
+        # Output layer (GAN)
         final_filter_size = int(self.image_size / (2 ** self.layers))
         self.conv_gan = nn.Conv2d(in_channels=self.channel * (2 ** (self.layers - 1)), out_channels=1,
                                   kernel_size=final_filter_size, stride=1, padding=0)
 
-        # 輸出層 (回歸)
+        # Output layer (REG)
         self.conv_reg = nn.Conv2d(in_channels=self.channel * (2 ** (self.layers - 1)), out_channels=2,
                                   kernel_size=final_filter_size, stride=1, padding=0)
 
     def forward(self, x_init):
-        # 第一層卷積
+        # Input layer
         x = F.leaky_relu(self.conv1(x_init), negative_slope=0.2)
 
-        # 堆疊中間層
+        # Hidden layer
         for conv in self.conv_layers:
             x = F.leaky_relu(conv(x), negative_slope=0.2)
 
-        # GAN 輸出層
+        # GAN output
         x_gan = self.conv_gan(x) # x_gan.shape = [32, 1, 1, 1]
         x_gan = x_gan.view(x_gan.size(0), -1) # x_gan.shape = [32, 1]
 
-        # 回歸輸出層
+        # REG output
         x_reg = self.conv_reg(x) # x_reg.shape = [32, 2, 1, 1]
         x_reg = x_reg.view(x_reg.size(0), -1)  # x_reg.shape = [32, 2]
 
         return x_gan, x_reg
-    
-    def named_parameters_with_prefix(self, prefix='discriminator'):
-        for name, param in self.named_parameters():
-            yield f"{prefix}.{name}", param
 
 class Generator(nn.Module):
     def __init__(self, style_dim=2):
@@ -143,11 +139,7 @@ class Generator(nn.Module):
         x = torch.tanh(x) # torch.Size([32, 3, 64, 64])
         return x
 
-    def named_parameters_with_prefix(self, prefix='generator'):
-        for name, param in self.named_parameters():
-            yield f"{prefix}.{name}", param
-
-def vgg_16(self, inputs, hps):
+def vgg_16(self, inputs):
 
     # 設定 GPU 動態記憶體增長
     if torch.cuda.is_available():

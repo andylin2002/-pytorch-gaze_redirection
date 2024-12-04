@@ -20,6 +20,8 @@ from utils.ops import l1_loss, content_loss, style_loss, angular_error
 
 import torchvision.models as models
 
+from tqdm import tqdm
+
 class Model(nn.Module):
     def __init__(self, params):
         super(Model, self).__init__()
@@ -34,8 +36,7 @@ class Model(nn.Module):
         self.global_step = torch.tensor(0, dtype=torch.int32, requires_grad=False)  # 全局步數
         self.lr = params.lr
 
-        (self.train_iter, self.valid_iter,
-         self.test_iter, self.train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
+        (self.train_iter, self.test_iter, self.train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
 
         def init_weights(m):
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
@@ -61,7 +62,6 @@ class Model(nn.Module):
         print(f"train dataset number: {train_dataset_num}")
         print(f"test dataset number: {test_dataset_num}")
 
-        '''train_data'''
 
         train_images = []
         train_angles_r = []
@@ -69,7 +69,8 @@ class Model(nn.Module):
         train_images_t = []
         train_angles_g = []
 
-        for each in range(train_dataset_num):
+        '''train_data'''
+        for each in tqdm(range(train_dataset_num)):
             image_data_class.train_images[each], image_data_class.train_angles_r[each], image_data_class.train_labels[each], image_data_class.train_images_t[each], image_data_class.train_angles_g[each] = image_data_class.image_processing(
                 image_data_class.train_images[each],
                 image_data_class.train_angles_r[each],
@@ -93,7 +94,7 @@ class Model(nn.Module):
         )
 
         '''test_data'''
-        for each in range(test_dataset_num):
+        for each in tqdm(range(test_dataset_num)):
             image_data_class.test_images[each], image_data_class.test_angles_r[each], image_data_class.test_labels[each], image_data_class.test_images_t[each], image_data_class.test_angles_g[each] = image_data_class.image_processing(
                 image_data_class.test_images[each],
                 image_data_class.test_angles_r[each],
@@ -117,22 +118,21 @@ class Model(nn.Module):
         )
         
         train_loader = DataLoader(train_dataset, batch_size=hps.batch_size, shuffle=True, num_workers=8)
-        valid_loader = DataLoader(test_dataset, batch_size=hps.batch_size, shuffle=False, num_workers=8)
         test_loader = DataLoader(test_dataset, batch_size=hps.batch_size, shuffle=False, num_workers=8)
 
-        return train_loader, valid_loader, test_loader, train_dataset_num
+        return train_loader, test_loader, train_dataset_num
     
-    def adv_loss(self):
+    def adv_loss(self, images_r, images_g):
 
         hps = self.params
 
         # 判別器對真實樣本和生成樣本的輸出
-        gan_real, reg_real = self.discriminator(self.x_r)
-        gan_fake, reg_fake = self.discriminator(self.x_g)
+        gan_real, reg_real = self.discriminator(images_r)
+        gan_fake, reg_fake = self.discriminator(images_g)
 
         # 生成插值樣本
-        eps = torch.rand((hps.batch_size, 1, 1, 1), device=self.x_r.device)
-        interpolated = eps * self.x_r + (1. - eps) * self.x_g
+        eps = torch.rand((hps.batch_size, 1, 1, 1), device=images_r.device)
+        interpolated = eps * images_r + (1. - eps) * images_g
         interpolated = interpolated.detach().requires_grad_(True)
 
         gan_inter, _ = self.discriminator(interpolated)
@@ -163,9 +163,7 @@ class Model(nn.Module):
 
         return adv_d_loss, adv_g_loss, reg_d_loss, reg_g_loss, gp
 
-    def feat_loss(self):
-
-        hps = self.params
+    def feat_loss(self, image_g, image_t):
         
         # 定義 VGG 模型和需要的層名稱
         content_layers = ["conv5"]  # conv5_3
@@ -177,10 +175,10 @@ class Model(nn.Module):
         ]
 
         # 拼接輸入：將 x_g 和 x_t 合併在一起
-        inputs = torch.cat([self.x_g, self.x_t], dim=0) # shape = [32+32, 3, 64, 64]
+        inputs = torch.cat([image_g, image_t], dim=0) # shape = [32+32, 3, 64, 64]
 
         # 加載預訓練的 VGG16 模型
-        _, end_points = vgg_16(self,inputs, hps)
+        _, end_points = vgg_16(self, inputs)
         '''
         # 禁止更新 VGG 的權重
         for param in vgg.parameters():
@@ -197,51 +195,39 @@ class Model(nn.Module):
 
         return c_loss, s_loss
 
-    def d_loss_calculator(self):
+    def d_loss_calculator(self, images_r, angles_r, images_t, angles_g):
 
-        hps = self.params
+        images_g = self.generator(images_r, angles_g)
 
-        self.x_g = self.generator(self.x_r, self.angles_g)
-
-        self.x_recon = self.generator(self.x_g, self.angles_r)
-
-        self.angles_valid_g = ((torch.rand(hps.batch_size, 2) * 2.0) - 1.0).to(self.device)
-
-        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+        images_recon = self.generator(images_g, angles_r)
 
         # reconstruction loss
-        self.recon_loss = l1_loss(self.x_r, self.x_recon)
+        self.recon_loss = l1_loss(images_r, images_recon)
 
         # content loss and style loss
-        self.c_loss, self.s_loss = self.feat_loss()
+        self.c_loss, self.s_loss = self.feat_loss(images_g, images_t)
 
         # regression losses and adversarial losses
         (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
-        self.reg_g_loss, self.gp) = self.adv_loss()
+        self.reg_g_loss, self.gp) = self.adv_loss(images_r, images_g)
 
         return self.adv_d_loss + 5.0 * self.reg_d_loss
 
-    def g_loss_calculator(self):
+    def g_loss_calculator(self, images_r, angles_r, images_t, angles_g):
 
-        hps = self.params
+        images_g = self.generator(images_r, angles_g)
 
-        self.x_g = self.generator(self.x_r, self.angles_g)
-
-        self.x_recon = self.generator(self.x_g, self.angles_r)
-
-        self.angles_valid_g = ((torch.rand(hps.batch_size, 2) * 2.0) - 1.0).to(self.device)
-
-        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+        images_recon = self.generator(images_g, angles_r)
 
         # reconstruction loss
-        self.recon_loss = l1_loss(self.x_r, self.x_recon)
+        self.recon_loss = l1_loss(images_r, images_recon)
 
         # content loss and style loss
-        self.c_loss, self.s_loss = self.feat_loss()
+        self.c_loss, self.s_loss = self.feat_loss(images_g, images_t)
 
         # regression losses and adversarial losses
         (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
-        self.reg_g_loss, self.gp) = self.adv_loss()
+        self.reg_g_loss, self.gp) = self.adv_loss(images_r, images_g)
 
         return (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
                                     50.0 * self.recon_loss +
@@ -262,21 +248,10 @@ class Model(nn.Module):
     def add_optimizer(self):
 
         hps = self.params
-        '''
-        # 獲取模型參數
-        g_vars = [p for _, p in self.generator.named_parameters()]
-        d_vars = [p for _, p in self.discriminator.named_parameters()]
-        '''
 
         # 創建優化器
         g_op = self.optimizer(hps.lr, self.generator)
         d_op = self.optimizer(hps.lr, self.discriminator)
-
-        '''
-        # 設置優化器的參數範圍
-        g_op.add_param_group({'params': g_vars})
-        d_op.add_param_group({'params': d_vars})
-        '''
 
         return d_op, g_op
     
@@ -295,16 +270,14 @@ class Model(nn.Module):
 
         # 記錄影像
         real_images = (self.x_r + 1) / 2.0
-        fake_images = torch.clamp((self.x_g + 1) / 2.0, 0., 1.)
-        recon_images = torch.clamp((self.x_recon + 1) / 2.0, 0., 1.)
-        valid_images = torch.clamp((self.x_valid_r + 1) / 2.0, 0., 1.)
-        valid_fake_images = torch.clamp((self.x_valid_g + 1) / 2.0, 0., 1.)
+        #fake_images = torch.clamp((self.x_g + 1) / 2.0, 0., 1.)
+        #recon_images = torch.clamp((self.x_recon + 1) / 2.0, 0., 1.)
+        #valid_images = torch.clamp((self.x_valid_r + 1) / 2.0, 0., 1.)
 
         writer.add_images('Images/real', real_images, step)
-        writer.add_images('Images/fake', fake_images, step)
-        writer.add_images('Images/recon', recon_images, step)
-        writer.add_images('Images/x_test', valid_images, step)
-        writer.add_images('Images/x_test_fake', valid_fake_images, step)
+        #writer.add_images('Images/fake', fake_images, step)
+        #writer.add_images('Images/recon', recon_images, step)
+        #writer.add_images('Images/x_test', valid_images, step)
     
     def train(self):
 
@@ -355,10 +328,9 @@ class Model(nn.Module):
                             param_group['lr'] = learning_rate
 
                     for it in range(num_iter):
-                        print(f"batch: {it}/{num_iter}")
+                        #print(f"batch: {it}/{num_iter}")
                         # 從 DataLoader 提取批次數據
                         train_batch = [t.to(device) for t in next(iter(self.train_iter))]
-                        valid_batch = [t.to(device) for t in next(iter(self.valid_iter))]
                         test_batch = [t.to(device) for t in next(iter(self.test_iter))]
 
                         # 解包訓練數據
@@ -369,16 +341,6 @@ class Model(nn.Module):
                         self.labels: torch.Size([32]),
                         self.x_t: torch.Size([32, 3, 64, 64]),
                         self.angles_g: torch.Size([32, 2])
-                        '''
-
-                        # 解包驗證數據
-                        self.x_valid_r, self.angles_valid_r, self.labels_valid, self.x_valid_t, self.angles_valid_g = valid_batch
-                        '''
-                        self.x_valid_r: torch.Size([32, 3, 64, 64]),
-                        self.angles_valid_r: torch.Size([32, 2]),
-                        self.labels_valid: torch.Size([32]),
-                        self.x_valid_t: torch.Size([32, 3, 64, 64]),
-                        self.angles_valid_g: torch.Size([32, 2])
                         '''
 
                         # 解包測試數據
@@ -398,9 +360,10 @@ class Model(nn.Module):
                         for param in self.generator.parameters():
                             param.requires_grad = False
 
-                        d_loss = self.d_loss_calculator()
+                        d_loss = self.d_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
+                        print(f"discriminator loss: {d_loss}")
 
-                        print("train discriminator...")
+                        #print("train discriminator...")
                         d_loss.backward()
                         self.d_op.step()
 
@@ -417,9 +380,10 @@ class Model(nn.Module):
                             for param in self.discriminator.parameters():
                                 param.requires_grad = False
 
-                            g_loss = self.g_loss_calculator()
+                            g_loss = self.g_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
+                            print(f"generator loss: {g_loss}")
 
-                            print("train generator...")
+                            #print("train generator...")
                             g_loss.backward()
                             self.g_op.step()
 
@@ -438,6 +402,8 @@ class Model(nn.Module):
                             # 保存模型權重
                             torch.save(self.state_dict(), f"{model_path}_{self.global_step}.pth")
 
+
+
             except KeyboardInterrupt:
                 print("Training interrupted. Saving model...")
                 torch.save(self.state_dict(), f"{model_path}_final.pth")
@@ -446,6 +412,7 @@ class Model(nn.Module):
                 summary_writer.close()
 
 
+### Haven't revised .
 
     def eval(self):
 
