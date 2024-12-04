@@ -102,6 +102,7 @@ class Generator(nn.Module):
         # Reshape and tile angles
         angles_reshaped = angles.view(-1, self.style_dim, 1, 1)
         angles_tiled = angles_reshaped.expand(-1, self.style_dim, input_.shape[2], input_.shape[3])
+
         x = torch.cat([input_, angles_tiled], dim=1) # torch.Size([32, 5, 64, 64])
         # Input layer
         x = self.input_conv(x)
@@ -147,6 +148,14 @@ class Generator(nn.Module):
             yield f"{prefix}.{name}", param
 
 def vgg_16(self, inputs, hps):
+
+    # 設定 GPU 動態記憶體增長
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        torch.backends.cudnn.benchmark = True
+        # PyTorch 不需要顯式設定動態記憶體增長，它會自動優化 GPU 記憶體使用
+    else:
+        device = torch.device("cpu")
 
     end_points = {}
 
@@ -196,6 +205,10 @@ def vgg_16(self, inputs, hps):
         model_dict.load_state_dict(self.vgg_dict, strict=False)  # 若權重名稱不完全匹配，允許部分載入
     except RuntimeError as e:
         print(f"Error loading pretrained weights: {e}")
+
+    # 移動模型到正確的裝置
+    for key in model_dict:
+        model_dict[key] = model_dict[key].to(device)
 
     # Forward pass
     x = model_dict['conv1'](inputs)

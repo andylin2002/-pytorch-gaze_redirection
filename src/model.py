@@ -202,9 +202,10 @@ class Model(nn.Module):
         hps = self.params
 
         self.x_g = self.generator(self.x_r, self.angles_g)
+
         self.x_recon = self.generator(self.x_g, self.angles_r)
 
-        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
+        self.angles_valid_g = ((torch.rand(hps.batch_size, 2) * 2.0) - 1.0).to(self.device)
 
         self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
 
@@ -225,9 +226,10 @@ class Model(nn.Module):
         hps = self.params
 
         self.x_g = self.generator(self.x_r, self.angles_g)
+
         self.x_recon = self.generator(self.x_g, self.angles_r)
 
-        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
+        self.angles_valid_g = ((torch.rand(hps.batch_size, 2) * 2.0) - 1.0).to(self.device)
 
         self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
 
@@ -329,6 +331,11 @@ class Model(nn.Module):
         else:
             device = torch.device("cpu")
         print(f"Using device: {device}")
+        self.device = device
+
+        # to device
+        self.generator = self.generator.to(device)
+        self.discriminator = self.discriminator.to(device)
 
         with torch.autograd.set_detect_anomaly(True):
             try:
@@ -350,9 +357,9 @@ class Model(nn.Module):
                     for it in range(num_iter):
                         print(f"batch: {it}/{num_iter}")
                         # 從 DataLoader 提取批次數據
-                        train_batch = next(iter(self.train_iter))
-                        valid_batch = next(iter(self.valid_iter))
-                        test_batch = next(iter(self.test_iter))
+                        train_batch = [t.to(device) for t in next(iter(self.train_iter))]
+                        valid_batch = [t.to(device) for t in next(iter(self.valid_iter))]
+                        test_batch = [t.to(device) for t in next(iter(self.test_iter))]
 
                         # 解包訓練數據
                         self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
