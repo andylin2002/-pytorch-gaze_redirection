@@ -196,6 +196,54 @@ class Model(nn.Module):
         s_loss = style_loss(endpoints_mixed, style_layers)
 
         return c_loss, s_loss
+
+    def d_loss_calculator(self):
+
+        hps = self.params
+
+        self.x_g = self.generator(self.x_r, self.angles_g)
+        self.x_recon = self.generator(self.x_g, self.angles_r)
+
+        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
+
+        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+
+        # reconstruction loss
+        self.recon_loss = l1_loss(self.x_r, self.x_recon)
+
+        # content loss and style loss
+        self.c_loss, self.s_loss = self.feat_loss()
+
+        # regression losses and adversarial losses
+        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
+        self.reg_g_loss, self.gp) = self.adv_loss()
+
+        return self.adv_d_loss + 5.0 * self.reg_d_loss
+
+    def g_loss_calculator(self):
+
+        hps = self.params
+
+        self.x_g = self.generator(self.x_r, self.angles_g)
+        self.x_recon = self.generator(self.x_g, self.angles_r)
+
+        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
+
+        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
+
+        # reconstruction loss
+        self.recon_loss = l1_loss(self.x_r, self.x_recon)
+
+        # content loss and style loss
+        self.c_loss, self.s_loss = self.feat_loss()
+
+        # regression losses and adversarial losses
+        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
+        self.reg_g_loss, self.gp) = self.adv_loss()
+
+        return (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
+                                    50.0 * self.recon_loss +
+                                    100.0 * self.s_loss + 100.0 * self.c_loss)
     
     def optimizer(self, lr, model):
 
@@ -336,23 +384,6 @@ class Model(nn.Module):
                         self.angles_test_g: torch.Size([32, 2])
                         '''
 
-                        self.x_g = self.generator(self.x_r, self.angles_g)
-                        self.x_recon = self.generator(self.x_g, self.angles_r)
-
-                        self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
-
-                        self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
-
-                        # reconstruction loss
-                        self.recon_loss = l1_loss(self.x_r, self.x_recon)
-
-                        # content loss and style loss
-                        self.c_loss, self.s_loss = self.feat_loss()
-
-                        # regression losses and adversarial losses
-                        (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
-                        self.reg_g_loss, self.gp) = self.adv_loss()
-
                         # 訓練 Discriminator
                         self.d_op.zero_grad()
 
@@ -360,7 +391,7 @@ class Model(nn.Module):
                         for param in self.generator.parameters():
                             param.requires_grad = False
 
-                        d_loss = self.adv_d_loss + 5.0 * self.reg_d_loss
+                        d_loss = self.d_loss_calculator()
 
                         print("train discriminator...")
                         d_loss.backward()
@@ -373,32 +404,13 @@ class Model(nn.Module):
                         # 訓練 Generator (每 5 步執行一次)
                         if it % 5 == 0:
 
-                            self.x_g = self.generator(self.x_r, self.angles_g)
-                            self.x_recon = self.generator(self.x_g, self.angles_r)
-
-                            self.angles_valid_g = (torch.rand(hps.batch_size, 2) * 2.0) - 1.0
-
-                            self.x_valid_g = self.generator(self.x_valid_r, self.angles_valid_g)
-
-                            # reconstruction loss
-                            self.recon_loss = l1_loss(self.x_r, self.x_recon)
-
-                            # content loss and style loss
-                            self.c_loss, self.s_loss = self.feat_loss()
-
-                            # regression losses and adversarial losses
-                            (self.adv_d_loss, self.adv_g_loss, self.reg_d_loss,
-                            self.reg_g_loss, self.gp) = self.adv_loss()
-
                             self.g_op.zero_grad()
 
                             # 暫時固定 Discriminator 的參數
                             for param in self.discriminator.parameters():
                                 param.requires_grad = False
 
-                            g_loss = (self.adv_g_loss + 5.0 * self.reg_g_loss +  # self.adv_g_loss 定義已加負號
-                                    50.0 * self.recon_loss +
-                                    100.0 * self.s_loss + 100.0 * self.c_loss)
+                            g_loss = self.g_loss_calculator()
 
                             print("train generator...")
                             g_loss.backward()
