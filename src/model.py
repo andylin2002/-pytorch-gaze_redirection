@@ -18,9 +18,9 @@ from torchvision.utils import save_image
 
 from utils.ops import l1_loss, content_loss, style_loss, angular_error
 
-import torchvision.models as models
-
 from tqdm import tqdm
+from PIL import Image
+import torchvision.transforms as transforms
 
 class Model(nn.Module):
     def __init__(self, params):
@@ -401,8 +401,9 @@ class Model(nn.Module):
                                 # 保存模型權重
                                 min_g_test_loss = g_test_loss
                                 print(f"*****New lowest generator test loss at step: {self.global_step}*****")
-                                model_path = os.path.join(hps.log_dir, "model.ckpt")
-                                torch.save(self.state_dict(), model_path)
+                                generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
+                                torch.save(self.generator.state_dict(), generator_model_path)
+
 
                             self.global_step = epoch * num_iter + it
 
@@ -418,14 +419,12 @@ class Model(nn.Module):
             finally:
                 summary_writer.close()
 
-
-### Haven't revised .
-
     def eval(self):
 
         hps = self.params
+        channels = 3
 
-        checkpoint_path = os.path.join(hps.log_dir, 'model.ckpt')
+        checkpoint_path = os.path.join(hps.log_dir, 'generator.ckpt')
         self.generator.load_state_dict(torch.load(checkpoint_path))
 
         # 設定 GPU 動態記憶體增長
@@ -437,44 +436,34 @@ class Model(nn.Module):
             device = torch.device("cpu")
         #print(f"Using device: {device}")
 
-        imgs_dir = os.path.join(hps.log_dir, 'eval')
-        os.makedirs(imgs_dir, exist_ok=True)
+        new_eyes_dir = os.path.join(hps.log_dir, 'eval')
+        os.makedirs(new_eyes_dir, exist_ok=True)
 
-        tar_dir = os.path.join(imgs_dir, 'targets')
-        gene_dir = os.path.join(imgs_dir, 'genes')
-        real_dir = os.path.join(imgs_dir, 'reals')
+        input_images_dir = hps.eyes_dir
+        input_images_paths = [os.path.join(input_images_dir, fname) for fname in os.listdir(input_images_dir) if fname.endswith('jpg')]
+        input_images = []
 
-        os.makedirs(tar_dir, exist_ok=True)
-        os.makedirs(gene_dir, exist_ok=True)
-        os.makedirs(real_dir, exist_ok=True)
+        transform = transforms.Compose([
+                transforms.Resize((hps.image_size, hps.image_size)),  # 調整大小
+                transforms.ToTensor(),  # 轉換為張量並將像素值歸一化到 [0, 1]
+                transforms.Normalize(mean=[0.5] * channels, std=[0.5] * channels)  # 將像素值歸一化到 [-1, 1]
+            ])
 
-        with torch.no_grad():
-            for i, (real_imgs, target_imgs, angles_r, angles_g) in enumerate(self.test_loader):
-                real_imgs, target_imgs, angles_r, angles_g = (
-                    real_imgs.to(hps.device),
-                    target_imgs.to(hps.device),
-                    angles_r.to(hps.device),
-                    angles_g.to(hps.device),
-                )
+        for i, img_path in enumerate(input_images_paths):
+            input_image = Image.open(img_path).convert("RGB")
+            input_image = transform(input_image)
+            input_images.append(input_image)
 
-                # Generate fake images
-                fake_imgs = self.generator(real_imgs, angles_g)
+        input_images = torch.stack(input_images) #input_images.shape = [number, 3, 64, 64]
 
-                # Calculate angular errors
-                a_t = angles_g.cpu().numpy() * np.array([15, 10])
-                a_r = angles_r.cpu().numpy() * np.array([15, 10])
-                delta = angular_error(a_t, a_r)
+        gaze_angles = torch.zeros(len(input_images), 2)
 
-                # Save images
-                for j in range(real_imgs.size(0)):
-                    save_image(target_imgs[j], os.path.join(
-                        tar_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
-
-                    save_image(fake_imgs[j], os.path.join(
-                        gene_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
-
-                    save_image(real_imgs[j], os.path.join(
-                        real_dir, f"{i}_{j}_{delta[j]:.3f}_H{a_t[j][0]}_V{a_t[j][1]}.jpg"))
+        with torch.no_grad():  # 禁用梯度計算
+            generated_image = self.generator(input_images, gaze_angles) # generated_image.shape = [number, 3, 64, 64]
+        
+        for i, new_img in enumerate(generated_image):
+            file_name = os.path.join(new_eyes_dir, f'generated_{i+1}.png')
+            save_image(new_img, file_name)
 
         print("Evaluation finished.")
         
