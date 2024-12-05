@@ -12,7 +12,7 @@ python main.py --mode train --data_path /home/andy/AILab/AIfinal/pytorch_gaze_re
 
 ## Test
 ```
-python main.py --mode eval --eyes_dir ./eyes/ --log_dir ./log/ --batch_size 16
+python main.py --mode eval --client_pictures_dir ./client_pictures/ --log_dir ./log/
 ```
 
 ## VGG16 pretrained weights
