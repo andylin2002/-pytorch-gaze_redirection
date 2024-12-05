@@ -39,7 +39,7 @@ parser.add_argument('--log_dir', type=str, help='path of eval checkpoint')
 parser.add_argument('--vgg_path', type=str, help='path of vgg model')
 
 # test dir
-parser.add_argument('--eyes_dir', type=str, help='path of eyes images')
+parser.add_argument('--client_pictures_dir', type=str, help='path of eyes images')
 
 params = parser.parse_args()
 

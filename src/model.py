@@ -17,6 +17,7 @@ import numpy as np
 from torchvision.utils import save_image
 
 from utils.ops import l1_loss, content_loss, style_loss, angular_error
+from utils.eyes_catch import eyes_catch
 
 from tqdm import tqdm
 from PIL import Image
@@ -422,10 +423,12 @@ class Model(nn.Module):
     def eval(self):
 
         hps = self.params
-        channels = 3
 
         checkpoint_path = os.path.join(hps.log_dir, 'generator.ckpt')
         self.generator.load_state_dict(torch.load(checkpoint_path))
+
+        eval_dir = os.path.join(hps.log_dir, 'eval')
+        os.makedirs(eval_dir, exist_ok=True)
 
         # 設定 GPU 動態記憶體增長
         if torch.cuda.is_available():
@@ -435,35 +438,27 @@ class Model(nn.Module):
         else:
             device = torch.device("cpu")
         #print(f"Using device: {device}")
-
-        new_eyes_dir = os.path.join(hps.log_dir, 'eval')
-        os.makedirs(new_eyes_dir, exist_ok=True)
-
-        input_images_dir = hps.eyes_dir
-        input_images_paths = [os.path.join(input_images_dir, fname) for fname in os.listdir(input_images_dir) if fname.endswith('jpg')]
-        input_images = []
-
-        transform = transforms.Compose([
-                transforms.Resize((hps.image_size, hps.image_size)),  # 調整大小
-                transforms.ToTensor(),  # 轉換為張量並將像素值歸一化到 [0, 1]
-                transforms.Normalize(mean=[0.5] * channels, std=[0.5] * channels)  # 將像素值歸一化到 [-1, 1]
-            ])
-
-        for i, img_path in enumerate(input_images_paths):
-            input_image = Image.open(img_path).convert("RGB")
-            input_image = transform(input_image)
-            input_images.append(input_image)
-
-        input_images = torch.stack(input_images) #input_images.shape = [number, 3, 64, 64]
-
-        gaze_angles = torch.zeros(len(input_images), 2)
-
-        with torch.no_grad():  # 禁用梯度計算
-            generated_image = self.generator(input_images, gaze_angles) # generated_image.shape = [number, 3, 64, 64]
         
-        for i, new_img in enumerate(generated_image):
-            file_name = os.path.join(new_eyes_dir, f'generated_{i+1}.png')
-            save_image(new_img, file_name)
+        for file_name in os.listdir(hps.client_pictures_dir): # for each picture
+            each_eval_dir = os.path.join(eval_dir, f'eval_{file_name}')
+            os.makedirs(each_eval_dir, exist_ok=True)
+
+            input_images = eyes_catch(hps, file_name)
+
+            print(input_images.shape)
+
+            gaze_angles = torch.zeros(len(input_images), 2)
+
+            with torch.no_grad():  # 禁用梯度計算
+                generated_image = self.generator(input_images, gaze_angles) # generated_image.shape = [number, 3, 64, 64]
+            
+            for i, new_img in enumerate(generated_image):
+                if i % 2 == 0: # left eye
+                    file_name = os.path.join(each_eval_dir, f'generated_{i // 2}_L.png')
+                    save_image(new_img, file_name)
+                else: # right eye
+                    file_name = os.path.join(each_eval_dir, f'generated_{i // 2}_R.png')
+                    save_image(new_img, file_name)
 
         print("Evaluation finished.")
         
