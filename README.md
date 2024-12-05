@@ -1,8 +1,8 @@
 ## Dependencies
 
 tensorflow == 2.18.0 <br />
-Python == 3.10.15
-
+Python == 3.10.15 <br />
+dlib == 19.24.6
 
 ## Train
 
