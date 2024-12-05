@@ -36,8 +36,6 @@ class Model(nn.Module):
         self.global_step = torch.tensor(0, dtype=torch.int32, requires_grad=False)  # 全局步數
         self.lr = params.lr
 
-        (self.train_iter, self.test_iter, self.train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
-
         def init_weights(m):
             if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Linear):
                 torch.nn.init.xavier_uniform_(m.weight)  # Xavier 初始化
@@ -283,8 +281,9 @@ class Model(nn.Module):
 
         hps = self.params
 
+        (train_iter, test_iter, train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
+
         num_epoch = hps.epochs
-        train_size = self.train_size
         batch_size = hps.batch_size
         learning_rate = hps.lr
 
@@ -293,8 +292,6 @@ class Model(nn.Module):
         # 日誌與模型路徑
         summary_dir = os.path.join(hps.log_dir, 'summary')
         summary_writer = SummaryWriter(log_dir=summary_dir)
-
-        model_path = os.path.join(hps.log_dir, 'model.ckpt')
 
         # 設定 GPU 動態記憶體增長
         if torch.cuda.is_available():
@@ -309,6 +306,8 @@ class Model(nn.Module):
         # to device
         self.generator = self.generator.to(device)
         self.discriminator = self.discriminator.to(device)
+
+        min_g_test_loss = float('inf')
 
         with torch.autograd.set_detect_anomaly(True):
             try:
@@ -330,8 +329,8 @@ class Model(nn.Module):
                     for it in range(num_iter):
                         #print(f"batch: {it}/{num_iter}")
                         # 從 DataLoader 提取批次數據
-                        train_batch = [t.to(device) for t in next(iter(self.train_iter))]
-                        test_batch = [t.to(device) for t in next(iter(self.test_iter))]
+                        train_batch = [t.to(device) for t in next(iter(train_iter))]
+                        test_batch = [t.to(device) for t in next(iter(test_iter))]
 
                         # 解包訓練數據
                         self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
@@ -361,7 +360,6 @@ class Model(nn.Module):
                             param.requires_grad = False
 
                         d_loss = self.d_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
-                        print(f"discriminator loss: {d_loss}")
 
                         #print("train discriminator...")
                         d_loss.backward()
@@ -381,7 +379,7 @@ class Model(nn.Module):
                                 param.requires_grad = False
 
                             g_loss = self.g_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
-                            print(f"generator loss: {g_loss}")
+                            print(f"generator loss: {g_loss:<15.2f}, discriminator loss: {d_loss:<15.2f}")
 
                             #print("train generator...")
                             g_loss.backward()
@@ -394,19 +392,28 @@ class Model(nn.Module):
                         
                         # 記錄摘要和保存模型
                         if it % hps.summary_steps == 0:
+
+                            d_test_loss = self.d_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
+                            g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
+                            print(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
+
+                            if g_test_loss < min_g_test_loss:
+                                # 保存模型權重
+                                min_g_test_loss = g_test_loss
+                                print(f"*****New lowest generator test loss at step: {self.global_step}*****")
+                                model_path = os.path.join(hps.log_dir, "model.ckpt")
+                                torch.save(self.state_dict(), model_path)
+
                             self.global_step = epoch * num_iter + it
 
                             # 使用自定義的 add_summary 函式
                             self.add_summary(summary_writer, self.global_step)
 
-                            # 保存模型權重
-                            torch.save(self.state_dict(), f"{model_path}_{self.global_step}.pth")
-
 
 
             except KeyboardInterrupt:
                 print("Training interrupted. Saving model...")
-                torch.save(self.state_dict(), f"{model_path}_final.pth")
+                torch.save(self.state_dict(), f"model.ckpt")
 
             finally:
                 summary_writer.close()
