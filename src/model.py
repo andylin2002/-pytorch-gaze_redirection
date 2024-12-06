@@ -58,8 +58,6 @@ class Model(nn.Module):
 
         train_dataset_num = len(image_data_class.train_images)
         test_dataset_num = len(image_data_class.test_images)
-        print(f"train dataset number: {train_dataset_num}")
-        print(f"test dataset number: {test_dataset_num}")
 
 
         train_images = []
@@ -69,6 +67,7 @@ class Model(nn.Module):
         train_angles_g = []
 
         '''train_data'''
+        tqdm.write(f"train dataset number: {train_dataset_num}")
         for each in tqdm(range(train_dataset_num)):
             image_data_class.train_images[each], image_data_class.train_angles_r[each], image_data_class.train_labels[each], image_data_class.train_images_t[each], image_data_class.train_angles_g[each] = image_data_class.image_processing(
                 image_data_class.train_images[each],
@@ -93,6 +92,7 @@ class Model(nn.Module):
         )
 
         '''test_data'''
+        tqdm.write(f"test dataset number: {test_dataset_num}")
         for each in tqdm(range(test_dataset_num)):
             image_data_class.test_images[each], image_data_class.test_angles_r[each], image_data_class.test_labels[each], image_data_class.test_images_t[each], image_data_class.test_angles_g[each] = image_data_class.image_processing(
                 image_data_class.test_images[each],
@@ -321,7 +321,7 @@ class Model(nn.Module):
                 # 動態調整學習率
                 if epoch >= num_epoch // 2:
                     learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
-                    print(self.d_op.param_groups)
+                    #print(self.d_op.param_groups)
                     for param_group in self.d_op.param_groups:
                         param_group['lr'] = learning_rate
                     for param_group in self.d_op.param_groups:
@@ -393,20 +393,18 @@ class Model(nn.Module):
                     
                     # 記錄摘要和保存模型
                     if it % hps.summary_steps == 0:
+                        self.global_step = epoch * num_iter + it
 
                         d_test_loss = self.d_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
                         g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
-                        print(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
+                        tqdm.write(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
 
                         if g_test_loss < min_g_test_loss:
                             # 保存模型權重
                             min_g_test_loss = g_test_loss
-                            print(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New lowest generator test loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
+                            tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New lowest generator test loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
                             generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
                             torch.save(self.generator.state_dict(), generator_model_path)
-
-
-                        self.global_step = epoch * num_iter + it
 
                         # 使用自定義的 add_summary 函式
                         self.add_summary(summary_writer, self.global_step)
