@@ -1,7 +1,7 @@
 ## Dependencies
 
-torch == 2.5.1
 Python == 3.10.15 <br />
+torch == 2.5.1 <br />
 dlib == 19.24.6
 
 ## Train
