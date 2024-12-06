@@ -310,115 +310,113 @@ class Model(nn.Module):
 
         min_g_test_loss = float('inf')
 
-        with torch.autograd.set_detect_anomaly(True):
-            try:
-                for epoch in range(num_epoch):
-                    print(f"Epoch: {epoch+1}/{num_epoch}")
+        
+        try:
+            for epoch in range(num_epoch):
+                print(f"Epoch: {epoch+1}/{num_epoch}")
 
-                    # update operations for generator and discriminator
-                    self.d_op, self.g_op = self.add_optimizer()
+                # update operations for generator and discriminator
+                self.d_op, self.g_op = self.add_optimizer()
 
-                    # 動態調整學習率
-                    if epoch >= num_epoch // 2:
-                        learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
-                        print(self.d_op.param_groups)
-                        for param_group in self.d_op.param_groups:
-                            param_group['lr'] = learning_rate
-                        for param_group in self.d_op.param_groups:
-                            param_group['lr'] = learning_rate
+                # 動態調整學習率
+                if epoch >= num_epoch // 2:
+                    learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
+                    print(self.d_op.param_groups)
+                    for param_group in self.d_op.param_groups:
+                        param_group['lr'] = learning_rate
+                    for param_group in self.d_op.param_groups:
+                        param_group['lr'] = learning_rate
 
-                    for it in range(num_iter):
-                        #print(f"batch: {it}/{num_iter}")
-                        # 從 DataLoader 提取批次數據
-                        train_batch = [t.to(device) for t in next(iter(train_iter))]
-                        test_batch = [t.to(device) for t in next(iter(test_iter))]
+                for it in tqdm(range(num_iter)):
+                    #print(f"batch: {it}/{num_iter}")
+                    # 從 DataLoader 提取批次數據
+                    train_batch = [t.to(device) for t in next(iter(train_iter))]
+                    test_batch = [t.to(device) for t in next(iter(test_iter))]
 
-                        # 解包訓練數據
-                        self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
-                        '''
-                        self.x_r: torch.Size([32, 3, 64, 64]),
-                        self.angles_r: torch.Size([32, 2]),
-                        self.labels: torch.Size([32]),
-                        self.x_t: torch.Size([32, 3, 64, 64]),
-                        self.angles_g: torch.Size([32, 2])
-                        '''
+                    # 解包訓練數據
+                    self.x_r, self.angles_r, self.labels, self.x_t, self.angles_g = train_batch
+                    '''
+                    self.x_r: torch.Size([32, 3, 64, 64]),
+                    self.angles_r: torch.Size([32, 2]),
+                    self.labels: torch.Size([32]),
+                    self.x_t: torch.Size([32, 3, 64, 64]),
+                    self.angles_g: torch.Size([32, 2])
+                    '''
 
-                        # 解包測試數據
-                        self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
-                        '''
-                        self.x_test_r: torch.Size([32, 3, 64, 64]),
-                        self.angles_test_r: torch.Size([32, 2]),
-                        self.labels_test: torch.Size([32]),
-                        self.x_test_t: torch.Size([32, 3, 64, 64]),
-                        self.angles_test_g: torch.Size([32, 2])
-                        '''
+                    # 解包測試數據
+                    self.x_test_r, self.angles_test_r, self.labels_test, self.x_test_t, self.angles_test_g = test_batch
+                    '''
+                    self.x_test_r: torch.Size([32, 3, 64, 64]),
+                    self.angles_test_r: torch.Size([32, 2]),
+                    self.labels_test: torch.Size([32]),
+                    self.x_test_t: torch.Size([32, 3, 64, 64]),
+                    self.angles_test_g: torch.Size([32, 2])
+                    '''
 
-                        # 訓練 Discriminator
-                        self.d_op.zero_grad()
+                    # 訓練 Discriminator
+                    self.d_op.zero_grad()
 
-                        # 暫時固定 Generator 的參數
-                        for param in self.generator.parameters():
+                    # 暫時固定 Generator 的參數
+                    for param in self.generator.parameters():
+                        param.requires_grad = False
+
+                    d_loss = self.d_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
+
+                    #print("train discriminator...")
+                    d_loss.backward()
+                    self.d_op.step()
+
+                    # 解鎖 Generator 的參數
+                    for param in self.generator.parameters():
+                        param.requires_grad = True
+
+                    # 訓練 Generator (每 5 步執行一次)
+                    if it % 5 == 0:
+
+                        self.g_op.zero_grad()
+
+                        # 暫時固定 Discriminator 的參數
+                        for param in self.discriminator.parameters():
                             param.requires_grad = False
 
-                        d_loss = self.d_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
+                        g_loss = self.g_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
+                        #print(f"generator loss: {g_loss:<15.2f}, discriminator loss: {d_loss:<15.2f}")
 
-                        #print("train discriminator...")
-                        d_loss.backward()
-                        self.d_op.step()
+                        #print("train generator...")
+                        g_loss.backward()
+                        self.g_op.step()
 
-                        # 解鎖 Generator 的參數
-                        for param in self.generator.parameters():
+                        # 解鎖 Discriminator 的參數
+                        for param in self.discriminator.parameters():
                             param.requires_grad = True
 
-                        # 訓練 Generator (每 5 步執行一次)
-                        if it % 5 == 0:
+                    
+                    # 記錄摘要和保存模型
+                    if it % hps.summary_steps == 0:
 
-                            self.g_op.zero_grad()
+                        d_test_loss = self.d_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
+                        g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
+                        print(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
 
-                            # 暫時固定 Discriminator 的參數
-                            for param in self.discriminator.parameters():
-                                param.requires_grad = False
-
-                            g_loss = self.g_loss_calculator(self.x_r, self.angles_r, self.x_t, self.angles_g)
-                            print(f"generator loss: {g_loss:<15.2f}, discriminator loss: {d_loss:<15.2f}")
-
-                            #print("train generator...")
-                            g_loss.backward()
-                            self.g_op.step()
-
-                            # 解鎖 Discriminator 的參數
-                            for param in self.discriminator.parameters():
-                                param.requires_grad = True
-
-                        
-                        # 記錄摘要和保存模型
-                        if it % hps.summary_steps == 0:
-
-                            d_test_loss = self.d_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
-                            g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
-                            print(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
-
-                            if g_test_loss < min_g_test_loss:
-                                # 保存模型權重
-                                min_g_test_loss = g_test_loss
-                                print(f"*****New lowest generator test loss at step: {self.global_step}*****")
-                                generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
-                                torch.save(self.generator.state_dict(), generator_model_path)
+                        if g_test_loss < min_g_test_loss:
+                            # 保存模型權重
+                            min_g_test_loss = g_test_loss
+                            print(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New lowest generator test loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
+                            generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
+                            torch.save(self.generator.state_dict(), generator_model_path)
 
 
-                            self.global_step = epoch * num_iter + it
+                        self.global_step = epoch * num_iter + it
 
-                            # 使用自定義的 add_summary 函式
-                            self.add_summary(summary_writer, self.global_step)
+                        # 使用自定義的 add_summary 函式
+                        self.add_summary(summary_writer, self.global_step)
 
+        except KeyboardInterrupt:
+            print("Training interrupted. Saving model...")
+            torch.save(self.state_dict(), f"model.ckpt")
 
-
-            except KeyboardInterrupt:
-                print("Training interrupted. Saving model...")
-                torch.save(self.state_dict(), f"model.ckpt")
-
-            finally:
-                summary_writer.close()
+        finally:
+            summary_writer.close()
 
     def eval(self):
 
@@ -443,9 +441,7 @@ class Model(nn.Module):
             each_eval_dir = os.path.join(eval_dir, f'eval_{file_name}')
             os.makedirs(each_eval_dir, exist_ok=True)
 
-            input_images = eyes_catch(hps, file_name)
-
-            print(input_images.shape)
+            input_images = eyes_catch(hps, file_name) # input_images.shape = [eyes' number, 3, 64, 64]
 
             gaze_angles = torch.zeros(len(input_images), 2)
 
