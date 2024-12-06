@@ -1,6 +1,6 @@
 ## Dependencies
 
-tensorflow == 2.18.0 <br />
+torch == 2.5.1
 Python == 3.10.15 <br />
 dlib == 19.24.6
 
