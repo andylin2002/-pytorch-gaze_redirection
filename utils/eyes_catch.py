@@ -47,11 +47,10 @@ def eyes_catch(hps, file_name):
             
             # 把 PIL.Image 物件轉換成 numpy ndarray
             img = np.array(image)
+            dets = face_detector(img, 0) # 因為測試的圖像己經很大了, 因此我們不啟動upsampling
         
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
-
-    dets = face_detector(img, 0) # 因為測試的圖像己經很大了, 因此我們不啟動upsampling
 
     # dets的元素個數即為偵測到臉的個數
     '''print("Number of faces detected: {}".format(len(dets)))'''

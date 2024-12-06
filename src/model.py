@@ -308,8 +308,7 @@ class Model(nn.Module):
         self.generator = self.generator.to(device)
         self.discriminator = self.discriminator.to(device)
 
-        min_g_test_loss = float('inf')
-
+        best_model_loss = float('inf')
         
         try:
             for epoch in range(num_epoch):
@@ -399,10 +398,13 @@ class Model(nn.Module):
                         g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
                         tqdm.write(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
 
-                        if g_test_loss < min_g_test_loss:
+                        #定義比較模型學習好壞的標準
+                        lambda_val = torch.maximum(torch.tensor(0.0), 0.1 * (d_test_loss + 20)) # discriminator 在 -20以上都會對距離造成影響
+                        challenger_loss = (g_test_loss + lambda_val * torch.maximum(torch.tensor(0.0), abs(g_test_loss - d_test_loss))) # generator loss 加上距離懲罰
+                        if challenger_loss < best_model_loss:
                             # 保存模型權重
-                            min_g_test_loss = g_test_loss
-                            tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New lowest generator test loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
+                            best_model_loss = challenger_loss
+                            tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New best model loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
                             generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
                             torch.save(self.generator.state_dict(), generator_model_path)
 
@@ -411,7 +413,7 @@ class Model(nn.Module):
 
         except KeyboardInterrupt:
             print("Training interrupted. Saving model...")
-            torch.save(self.state_dict(), f"model.ckpt")
+            torch.save(self.state_dict(), "model.ckpt")
 
         finally:
             summary_writer.close()
