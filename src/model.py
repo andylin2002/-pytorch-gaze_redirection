@@ -18,6 +18,7 @@ from torchvision.utils import save_image
 
 from utils.ops import l1_loss, content_loss, style_loss, angular_error
 from utils.eyes_catch import eyes_catch
+from utils.paste import paste
 
 from tqdm import tqdm
 from PIL import Image
@@ -395,12 +396,13 @@ class Model(nn.Module):
                         self.global_step = epoch * num_iter + it
 
                         d_test_loss = self.d_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
+                        transformed_d_test_loss = torch.exp(d_test_loss / 10)
                         g_test_loss = self.g_loss_calculator(self.x_test_r, self.angles_test_r, self.x_test_t, self.angles_test_g)
-                        tqdm.write(f"generator test loss: {g_test_loss:<10.2f}, discriminator test loss: {d_test_loss:<10.2f}")
+                        transformed_g_test_loss = torch.exp(g_test_loss / 10)
+                        tqdm.write(f"generator test loss: {transformed_g_test_loss:<10.2f}, discriminator test loss: {transformed_d_test_loss:<10.2f}")
 
                         #定義比較模型學習好壞的標準
-                        lambda_val = torch.maximum(torch.tensor(0.0), 0.1 * (d_test_loss + 20)) # discriminator 在 -20以上都會對距離造成影響
-                        challenger_loss = (g_test_loss + lambda_val * torch.maximum(torch.tensor(0.0), abs(g_test_loss - d_test_loss))) # generator loss 加上距離懲罰
+                        challenger_loss = (transformed_g_test_loss + transformed_d_test_loss * (transformed_g_test_loss + transformed_d_test_loss)) # g + d * (g + d)
                         if challenger_loss < best_model_loss:
                             # 保存模型權重
                             best_model_loss = challenger_loss
@@ -441,12 +443,14 @@ class Model(nn.Module):
             each_eval_dir = os.path.join(eval_dir, f'eval_{file_name}')
             os.makedirs(each_eval_dir, exist_ok=True)
 
-            input_images = eyes_catch(hps, file_name) # input_images.shape = [eyes' number, 3, 64, 64]
+            picture_eyes_patch, eyes_position, size = eyes_catch(hps, file_name) # picture_eyes_patch.shape = [eyes' number, 3, 64, 64]
 
-            gaze_angles = torch.zeros(len(input_images), 2)
+            gaze_angles = torch.zeros(len(picture_eyes_patch), 2)
 
             with torch.no_grad():  # 禁用梯度計算
-                generated_image = self.generator(input_images, gaze_angles) # generated_image.shape = [number, 3, 64, 64]
+                generated_image = self.generator(picture_eyes_patch, gaze_angles) # generated_image.shape = [number, 3, 64, 64]
+            
+            paste(hps, file_name, generated_image, eyes_position, size)
             
             for i, new_img in enumerate(generated_image):
                 if i % 2 == 0: # left eye

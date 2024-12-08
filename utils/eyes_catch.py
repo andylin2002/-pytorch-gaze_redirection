@@ -61,6 +61,10 @@ def eyes_catch(hps, file_name):
 
     picture_eyes_patch = []
 
+    eyes_position = []
+
+    size = []
+
     # 遍歷每個偵測到的人臉
     for i, d in enumerate(dets):
         '''
@@ -112,6 +116,8 @@ def eyes_catch(hps, file_name):
         # 假設我們已經從 Dlib 得到左眼和右眼的邊界框座標
         left_eye = image.crop((left_eye_x1, left_eye_y1, left_eye_x2, left_eye_y2))
         right_eye = image.crop((right_eye_x1, right_eye_y1, right_eye_x2, right_eye_y2))
+        size.append(left_eye_size)
+        size.append(right_eye_size)
 
         transform = transforms.Compose([
                 transforms.Resize((hps.image_size, hps.image_size)),  # 調整大小
@@ -125,10 +131,13 @@ def eyes_catch(hps, file_name):
         picture_eyes_patch.append(left_eye_tensor)
         picture_eyes_patch.append(right_eye_tensor)
 
+        eyes_position.append([left_eye_x1, left_eye_y1])
+        eyes_position.append([right_eye_x1, right_eye_y1])
+
     # 將列表轉換為 Tensor
     picture_eyes_patch = torch.stack(picture_eyes_patch)
 
-    return picture_eyes_patch
+    return picture_eyes_patch, eyes_position, size
 
 
 
