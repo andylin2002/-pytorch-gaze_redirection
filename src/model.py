@@ -288,10 +288,9 @@ class Model(nn.Module):
             checkpoint = torch.load(current_model_path)
             self.generator.load_state_dict(checkpoint['current_generator'])
             self.discriminator.load_state_dict(checkpoint['current_discriminator'])
-
             print(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.Loaded previous model. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
-        else:
-            best_model_loss = float('inf')
+
+        best_model_loss = float('inf')
 
         (train_iter, test_iter, train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
 
