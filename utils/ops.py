@@ -107,12 +107,12 @@ def l2_loss(x, y):
     loss = torch.mean(torch.sum((x - y) ** 2, dim=(1, 2, 3)))
     return loss
 
-def content_loss(endpoints_mixed, content_layers):
+def content_loss(hps, endpoints_mixed, content_layers):
    
     loss = 0
     for layer in content_layers: # endpoints_mixed.shape = [32+32, 512, 4, 4]
         # Split the tensor along the batch dimension into two halves
-        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=32, dim=0)
+        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=hps.batch_size, dim=0)
         
         # Compute L2 loss and normalize by the size of the tensor
         size = feat_a.numel()  # Total number of elements in feat_a
@@ -120,12 +120,12 @@ def content_loss(endpoints_mixed, content_layers):
 
     return loss
 
-def style_loss(endpoints_mixed, style_layers):
+def style_loss(hps, endpoints_mixed, style_layers):
     
     loss = 0
     for layer in style_layers: # endpoints_mixed.shape = [32+32, 512, 4, 4]
         # Split the tensor along the batch dimension into two halves
-        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=32, dim=0)
+        feat_a, feat_b = torch.split(endpoints_mixed[layer], split_size_or_sections=hps.batch_size, dim=0)
 
         # Compute the size of the tensor
         size = feat_a.numel()

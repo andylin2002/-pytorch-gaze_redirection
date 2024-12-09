@@ -164,6 +164,8 @@ class Model(nn.Module):
         return adv_d_loss, adv_g_loss, reg_d_loss, reg_g_loss, gp
 
     def feat_loss(self, image_g, image_t):
+
+        hps = self.params
         
         # 定義 VGG 模型和需要的層名稱
         content_layers = ["conv5"]  # conv5_3
@@ -190,8 +192,8 @@ class Model(nn.Module):
             endpoints_mixed[layer] = end_points[layer]
 
         # 計算內容損失和風格損失
-        c_loss = content_loss(endpoints_mixed, content_layers)
-        s_loss = style_loss(endpoints_mixed, style_layers)
+        c_loss = content_loss(hps, endpoints_mixed, content_layers)
+        s_loss = style_loss(hps, endpoints_mixed, style_layers)
 
         return c_loss, s_loss
 
@@ -245,13 +247,11 @@ class Model(nn.Module):
                             betas=(hps.adam_beta1, hps.adam_beta2))
         raise AttributeError("attribute 'optimizer' is not assigned!")
 
-    def add_optimizer(self):
-
-        hps = self.params
+    def add_optimizer(self, learning_rate):
 
         # 創建優化器
-        g_op = self.optimizer(hps.lr, self.generator)
-        d_op = self.optimizer(hps.lr, self.discriminator)
+        g_op = self.optimizer(learning_rate, self.generator)
+        d_op = self.optimizer(learning_rate, self.discriminator)
 
         return d_op, g_op
     
@@ -290,6 +290,7 @@ class Model(nn.Module):
             self.discriminator.load_state_dict(checkpoint['best_discriminator'])
             best_generator_test_loss = checkpoint['best_generator_test_loss']
             best_discriminator_test_loss = checkpoint['best_discriminator_test_loss']
+            best_model_loss = best_generator_test_loss + best_discriminator_test_loss * (best_generator_test_loss + best_discriminator_test_loss)
             print(f"Loaded best model: best generator test loss = {best_generator_test_loss:<10.2f}, best discriminator test loss = {best_discriminator_test_loss:<10.2f}")
         else:
             best_model_loss = float('inf')
@@ -324,17 +325,13 @@ class Model(nn.Module):
             for epoch in range(num_epoch):
                 print(f"Epoch: {epoch+1}/{num_epoch}")
 
-                # update operations for generator and discriminator
-                self.d_op, self.g_op = self.add_optimizer()
-
                 # 動態調整學習率
                 if epoch >= num_epoch // 2:
-                    learning_rate = (2.0 - 2.0 * epoch / num_epoch) * hps.lr
-                    #print(self.d_op.param_groups)
-                    for param_group in self.d_op.param_groups:
-                        param_group['lr'] = learning_rate
-                    for param_group in self.d_op.param_groups:
-                        param_group['lr'] = learning_rate
+                    min_lr = 0.1 * hps.lr  # 最小學習率
+                    learning_rate = max(min_lr, (2.0 - 2.0 * epoch / num_epoch) * hps.lr)
+
+                # update operations for generator and discriminator
+                self.d_op, self.g_op = self.add_optimizer(learning_rate)
 
                 for it in tqdm(range(num_iter)):
                     #print(f"batch: {it}/{num_iter}")
@@ -438,8 +435,9 @@ class Model(nn.Module):
 
         hps = self.params
 
-        checkpoint_path = os.path.join(hps.log_dir, 'generator.ckpt')
-        self.generator.load_state_dict(torch.load(checkpoint_path))
+        checkpoint_path = os.path.join(hps.log_dir, 'best_model.ckpt')
+        checkpoint = torch.load(checkpoint_path)
+        self.generator.load_state_dict(checkpoint['best_generator'])
 
         eval_dir = os.path.join(hps.log_dir, 'eval')
         os.makedirs(eval_dir, exist_ok=True)
