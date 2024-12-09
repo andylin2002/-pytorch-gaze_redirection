@@ -23,7 +23,7 @@ parser.add_argument('--lr', type=float, default=0.0002,
                     help='learning rate')
 
 # training params
-parser.add_argument('--epochs', type=int, default=5,
+parser.add_argument('--epochs', type=int, default=1,
                     help='number of epochs')
 parser.add_argument('--summary_steps', type=int, default=50,
                     help='summary steps')
@@ -46,11 +46,13 @@ params = parser.parse_args()
 model = Model(params)
 
 if params.mode == 'train':
+    conti = False
     if not os.path.exists(params.log_dir):
         os.mkdir(params.log_dir)
     else:
-        raise FileExistsError("log_dir is not empty!")
-    model.train()
+        print("log_dir is not empty! Continue training")
+        conti = True
+    model.train(conti)
 
 elif params.mode == 'eval':
     if not params.log_dir:

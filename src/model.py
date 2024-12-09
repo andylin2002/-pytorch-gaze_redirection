@@ -279,9 +279,20 @@ class Model(nn.Module):
         #writer.add_images('Images/recon', recon_images, step)
         #writer.add_images('Images/x_test', valid_images, step)
     
-    def train(self):
+    def train(self, conti = False):
 
         hps = self.params
+
+        best_model_path = os.path.join(hps.log_dir, "best_model.ckpt")
+        if conti:
+            checkpoint = torch.load(best_model_path)
+            self.generator.load_state_dict(checkpoint['best_generator'])
+            self.discriminator.load_state_dict(checkpoint['best_discriminator'])
+            best_generator_test_loss = checkpoint['best_generator_test_loss']
+            best_discriminator_test_loss = checkpoint['best_discriminator_test_loss']
+            print(f"Loaded best model: best generator test loss = {best_generator_test_loss:<10.2f}, best discriminator test loss = {best_discriminator_test_loss:<10.2f}")
+        else:
+            best_model_loss = float('inf')
 
         (train_iter, test_iter, train_size) = self.data_loader() #加載訓練、驗證和測試數據集的迭代器
 
@@ -308,8 +319,6 @@ class Model(nn.Module):
         # to device
         self.generator = self.generator.to(device)
         self.discriminator = self.discriminator.to(device)
-
-        best_model_loss = float('inf')
         
         try:
             for epoch in range(num_epoch):
@@ -407,15 +416,20 @@ class Model(nn.Module):
                             # 保存模型權重
                             best_model_loss = challenger_loss
                             tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New best model loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
-                            generator_model_path = os.path.join(hps.log_dir, "generator.ckpt")
-                            torch.save(self.generator.state_dict(), generator_model_path)
+                            torch.save({
+                                'best_generator_test_loss': transformed_g_test_loss,
+                                'best_discriminator_test_loss': transformed_d_test_loss,
+                                'best_model_loss': best_model_loss,
+                                'best_generator': self.generator.state_dict(),
+                                'best_discriminator': self.discriminator.state_dict()
+                            }, best_model_path)
 
                         # 使用自定義的 add_summary 函式
                         self.add_summary(summary_writer, self.global_step)
 
         except KeyboardInterrupt:
             print("Training interrupted. Saving model...")
-            torch.save(self.state_dict(), "model.ckpt")
+            torch.save(self.state_dict(), os.path.join("log", "model.ckpt"))
 
         finally:
             summary_writer.close()

@@ -53,7 +53,7 @@ def eyes_catch(hps, file_name):
             print(f"Error processing {file_name}: {e}")
 
     # dets的元素個數即為偵測到臉的個數
-    '''print("Number of faces detected: {}".format(len(dets)))'''
+    #print("Number of faces detected: {}".format(len(dets)))
 
     '''----------crop eyes patch----------'''
 
