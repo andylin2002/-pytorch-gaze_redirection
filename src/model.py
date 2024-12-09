@@ -283,15 +283,13 @@ class Model(nn.Module):
 
         hps = self.params
 
-        best_model_path = os.path.join(hps.log_dir, "best_model.ckpt")
+        current_model_path = os.path.join(hps.log_dir, "current_model.ckpt")
         if conti:
-            checkpoint = torch.load(best_model_path)
+            checkpoint = torch.load(current_model_path)
             self.generator.load_state_dict(checkpoint['best_generator'])
             self.discriminator.load_state_dict(checkpoint['best_discriminator'])
-            best_generator_test_loss = checkpoint['best_generator_test_loss']
-            best_discriminator_test_loss = checkpoint['best_discriminator_test_loss']
-            best_model_loss = best_generator_test_loss + best_discriminator_test_loss * (best_generator_test_loss + best_discriminator_test_loss)
-            print(f"Loaded best model: best generator test loss = {best_generator_test_loss:<10.2f}, best discriminator test loss = {best_discriminator_test_loss:<10.2f}")
+
+            print(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.Loaded previous model. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
         else:
             best_model_loss = float('inf')
 
@@ -410,16 +408,14 @@ class Model(nn.Module):
                         #定義比較模型學習好壞的標準
                         challenger_loss = (transformed_g_test_loss + transformed_d_test_loss * (transformed_g_test_loss + transformed_d_test_loss)) # g + d * (g + d)
                         if challenger_loss < best_model_loss:
-                            # 保存模型權重
                             best_model_loss = challenger_loss
-                            tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New best model loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
-                            torch.save({
-                                'best_generator_test_loss': transformed_g_test_loss,
-                                'best_discriminator_test_loss': transformed_d_test_loss,
-                                'best_model_loss': best_model_loss,
-                                'best_generator': self.generator.state_dict(),
-                                'best_discriminator': self.discriminator.state_dict()
-                            }, best_model_path)
+                            tqdm.write(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.New lowest loss at step: {self.global_step}. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
+
+                        # 保存模型權重
+                        torch.save({
+                                'current_generator': self.generator.state_dict(),
+                                'current_discriminator': self.discriminator.state_dict()
+                            }, current_model_path)
 
                         # 使用自定義的 add_summary 函式
                         self.add_summary(summary_writer, self.global_step)
@@ -435,9 +431,9 @@ class Model(nn.Module):
 
         hps = self.params
 
-        checkpoint_path = os.path.join(hps.log_dir, 'best_model.ckpt')
+        checkpoint_path = os.path.join(hps.log_dir, 'current_model.ckpt')
         checkpoint = torch.load(checkpoint_path)
-        self.generator.load_state_dict(checkpoint['best_generator'])
+        self.generator.load_state_dict(checkpoint['current_generator'])
 
         eval_dir = os.path.join(hps.log_dir, 'eval')
         os.makedirs(eval_dir, exist_ok=True)
