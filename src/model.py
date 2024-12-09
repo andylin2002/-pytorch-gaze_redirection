@@ -286,8 +286,8 @@ class Model(nn.Module):
         current_model_path = os.path.join(hps.log_dir, "current_model.ckpt")
         if conti:
             checkpoint = torch.load(current_model_path)
-            self.generator.load_state_dict(checkpoint['best_generator'])
-            self.discriminator.load_state_dict(checkpoint['best_discriminator'])
+            self.generator.load_state_dict(checkpoint['current_generator'])
+            self.discriminator.load_state_dict(checkpoint['current_discriminator'])
 
             print(f". ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.Loaded previous model. ݁₊ ⊹ . ݁ ⟡ ݁ . ⊹ ₊ ݁.")
         else:
